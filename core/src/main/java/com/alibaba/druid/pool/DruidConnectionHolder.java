@@ -59,12 +59,12 @@ public final class DruidConnectionHolder {
     protected final Connection conn;
     protected final List<ConnectionEventListener> connectionEventListeners = new CopyOnWriteArrayList<ConnectionEventListener>();
     protected final List<StatementEventListener> statementEventListeners = new CopyOnWriteArrayList<StatementEventListener>();
-    protected final long connectTimeMillis;
-    protected volatile long lastActiveTimeMillis;
-    protected volatile long lastExecTimeMillis;
-    protected volatile long lastKeepTimeMillis;
-    protected volatile long lastValidTimeMillis;
-    protected long useCount;
+    protected final long connectTimeMillis; // 连接时间毫秒
+    protected volatile long lastActiveTimeMillis; // 最后一次活跃时间
+    protected volatile long lastExecTimeMillis; // 最后一次执行时间
+    protected volatile long lastKeepTimeMillis; // 最后一次保活时间
+    protected volatile long lastValidTimeMillis; // 最后一次验证时间
+    protected long useCount; // 连接被使用次数
     private long keepAliveCheckCount;
     private long lastNotEmptyWaitNanos;
     private final long createNanoSpan;
@@ -78,8 +78,8 @@ public final class DruidConnectionHolder {
     protected int underlyingHoldability;
     protected int underlyingTransactionIsolation;
     protected boolean underlyingAutoCommit;
-    protected volatile boolean discard;
-    protected volatile boolean active;
+    protected volatile boolean discard; // 连接状态：是否已丢弃
+    protected volatile boolean active; // 连接状态：是否活跃连接
     protected final Map<String, Object> variables;
     protected final Map<String, Object> globalVariables;
     final ReentrantLock lock = new ReentrantLock();

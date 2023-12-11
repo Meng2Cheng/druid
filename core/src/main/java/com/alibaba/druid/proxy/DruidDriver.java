@@ -199,11 +199,19 @@ public class DruidDriver implements Driver, DruidDriverMBean {
         return dataSource;
     }
 
+    /**
+     * 根据数据源地址初始化代理数据源相关配置
+     * @param url
+     * @param info
+     * @return
+     * @throws SQLException
+     */
     public static DataSourceProxyConfig parseConfig(String url, Properties info) throws SQLException {
         String restUrl = url.substring(DEFAULT_PREFIX.length());
 
         DataSourceProxyConfig config = new DataSourceProxyConfig();
 
+        // 设置代理数据源的驱动名称
         if (restUrl.startsWith(DRIVER_PREFIX)) {
             int pos = restUrl.indexOf(':', DRIVER_PREFIX.length());
             String driverText = restUrl.substring(DRIVER_PREFIX.length(), pos);
@@ -213,15 +221,18 @@ public class DruidDriver implements Driver, DruidDriverMBean {
             restUrl = restUrl.substring(pos + 1);
         }
 
+        // 设置代理数据源的过滤器集合
         if (restUrl.startsWith(FILTERS_PREFIX)) {
             int pos = restUrl.indexOf(':', FILTERS_PREFIX.length());
             String filtersText = restUrl.substring(FILTERS_PREFIX.length(), pos);
             for (String filterItem : filtersText.split(",")) {
+                // 根据过滤器名称，通过反射创建过滤器，并将其加入代理数据源的过滤器集合中
                 FilterManager.loadFilter(config.getFilters(), filterItem);
             }
             restUrl = restUrl.substring(pos + 1);
         }
 
+        // 设置代理数据源名称
         if (restUrl.startsWith(NAME_PREFIX)) {
             int pos = restUrl.indexOf(':', NAME_PREFIX.length());
             String name = restUrl.substring(NAME_PREFIX.length(), pos);
@@ -229,6 +240,7 @@ public class DruidDriver implements Driver, DruidDriverMBean {
             restUrl = restUrl.substring(pos + 1);
         }
 
+        // 设置代理数据源的Jmx选项
         if (restUrl.startsWith(JMX_PREFIX)) {
             int pos = restUrl.indexOf(':', JMX_PREFIX.length());
             String jmxOption = restUrl.substring(JMX_PREFIX.length(), pos);
@@ -236,14 +248,17 @@ public class DruidDriver implements Driver, DruidDriverMBean {
             restUrl = restUrl.substring(pos + 1);
         }
 
+        // 设置数据源地址
         String rawUrl = restUrl;
         config.setRawUrl(rawUrl);
 
+        // 设置驱动名称
         if (config.getRawDriverClassName() == null) {
             String rawDriverClassname = JdbcUtils.getDriverClassName(rawUrl);
             config.setRawDriverClassName(rawDriverClassname);
         }
 
+        // 设置数据源地址
         config.setUrl(url);
         return config;
     }

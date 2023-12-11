@@ -47,15 +47,15 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
     protected volatile DruidConnectionHolder holder;
     protected TransactionInfo transactionInfo;
     private final boolean dupCloseLogEnable;
-    protected volatile boolean traceEnable;
-    protected volatile boolean disable;
-    protected volatile boolean closed;
-    static AtomicIntegerFieldUpdater CLOSING_UPDATER = AtomicIntegerFieldUpdater.newUpdater(DruidPooledConnection.class, "closing");
-    protected final Thread ownerThread;
+    protected volatile boolean traceEnable; // 是否开启追踪
+    protected volatile boolean disable; // 连接状态：是否可用
+    protected volatile boolean closed; // 连接状态：是否已关闭
+    static AtomicIntegerFieldUpdater CLOSING_UPDATER = AtomicIntegerFieldUpdater.newUpdater(DruidPooledConnection.class, "closing"); // 线程安全的更新 closing
+    protected final Thread ownerThread; // 拥有连接的线程
     private long connectedTimeMillis;
-    private long connectedTimeNano;
-    private volatile boolean running;
-    private volatile boolean abandoned;
+    private long connectedTimeNano; // 连接超时时间
+    private volatile boolean running; // 连接状态：是否正在运行
+    private volatile boolean abandoned; // 连接状态：已经被移除（疑似连接泄露）
     protected StackTraceElement[] connectStackTrace;
     protected Throwable disableError;
     final ReentrantLock lock;
@@ -246,6 +246,7 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
             return;
         }
 
+        // 判断拥有连接的线程是否是当前线程，如果是，则同步回收，否则调用syncClose方法异步回收
         DruidAbstractDataSource dataSource = holder.getDataSource();
         boolean isSameThread = this.ownerThread == Thread.currentThread();
 
@@ -339,10 +340,12 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
             return;
         }
 
+        // 如果连接还没有被移除，则回收连接
         if (!this.abandoned) {
             holder.dataSource.recycle(this);
         }
 
+        // 连接回收后，设置当前代理连接持有的连接为空、事务信息为空、事务已关闭（代理层）
         this.holder = null;
         conn = null;
         transactionInfo = null;

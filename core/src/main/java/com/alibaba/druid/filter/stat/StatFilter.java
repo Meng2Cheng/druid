@@ -226,8 +226,10 @@ public class StatFilter extends FilterEventAdapter implements StatFilterMBean {
         long nanoSpan;
         long nowTime = System.currentTimeMillis();
 
+        // 前置处理
         JdbcDataSourceStat dataSourceStat = chain.getDataSource().getDataSourceStat();
         dataSourceStat.getConnectionStat().beforeConnect();
+        // 调用过滤器链执行下一个过滤器
         try {
             connection = chain.connection_connect(info);
             nanoSpan = System.nanoTime() - startNano;
@@ -235,6 +237,7 @@ public class StatFilter extends FilterEventAdapter implements StatFilterMBean {
             dataSourceStat.getConnectionStat().connectError(ex);
             throw ex;
         }
+        // 后置处理
         dataSourceStat.getConnectionStat().afterConnected(nanoSpan);
 
         if (connection != null) {
@@ -701,6 +704,7 @@ public class StatFilter extends FilterEventAdapter implements StatFilterMBean {
     @Override
     public DruidPooledConnection dataSource_getConnection(FilterChain chain, DruidDataSource dataSource,
                                                           long maxWaitMillis) throws SQLException {
+        // 使用过滤链获取一个过滤器，然后获取一个数据库连接
         DruidPooledConnection conn = chain.dataSource_connect(dataSource, maxWaitMillis);
 
         if (conn != null) {

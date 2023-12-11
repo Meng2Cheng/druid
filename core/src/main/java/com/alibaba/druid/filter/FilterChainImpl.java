@@ -33,7 +33,7 @@ import java.util.concurrent.Executor;
  * @author wenshao [szujobs@hotmail.com]
  */
 public class FilterChainImpl implements FilterChain {
-    protected int pos;
+    protected int pos; // 过滤器链下标
 
     private final DataSourceProxy dataSource;
 
@@ -5047,14 +5047,23 @@ public class FilterChainImpl implements FilterChain {
         connection.recycle();
     }
 
+    /**
+     * 将责任链封装到数据源
+     * @param dataSource
+     * @param maxWaitMillis
+     * @return
+     * @throws SQLException
+     */
     @Override
     public DruidPooledConnection dataSource_connect(DruidDataSource dataSource,
                                                     long maxWaitMillis) throws SQLException {
         if (this.pos < filterSize) {
+            // 调用过滤器的dataSource_getConnection方法，获得封装了过滤器的连接 DruidPooledConnection
             DruidPooledConnection conn = nextFilter().dataSource_getConnection(this, dataSource, maxWaitMillis);
             return conn;
         }
 
+        // 所有过滤器都封装完之后，返回DruidPooledConnection
         return dataSource.getConnectionDirect(maxWaitMillis);
     }
 

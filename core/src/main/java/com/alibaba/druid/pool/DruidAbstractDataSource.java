@@ -90,18 +90,18 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
 
     protected String name;
 
-    protected volatile String username;
-    protected volatile String password;
-    protected volatile String jdbcUrl;
-    protected volatile String driverClass;
-    protected volatile ClassLoader driverClassLoader;
-    protected volatile Properties connectProperties = new Properties();
+    protected volatile String username; // 数据库用户名
+    protected volatile String password; // 数据库密码
+    protected volatile String jdbcUrl; // 数据库url
+    protected volatile String driverClass; // 数据库驱动
+    protected volatile ClassLoader driverClassLoader; // 数据库驱动类加载器
+    protected volatile Properties connectProperties = new Properties(); // 连接配置
 
     protected volatile PasswordCallback passwordCallback;
     protected volatile NameCallback userCallback;
 
     protected volatile int initialSize = DEFAULT_INITIAL_SIZE;
-    protected volatile int maxActive = DEFAULT_MAX_ACTIVE_SIZE;
+    protected volatile int maxActive = DEFAULT_MAX_ACTIVE_SIZE; // 最大活跃连接数
     protected volatile int minIdle = DEFAULT_MIN_IDLE;
     protected volatile int maxIdle = DEFAULT_MAX_IDLE;
     protected volatile long maxWait = DEFAULT_MAX_WAIT;
@@ -127,8 +127,8 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
 
     protected Driver driver;
 
-    protected volatile int connectTimeout; // milliSeconds
-    protected volatile int socketTimeout; // milliSeconds
+    protected volatile int connectTimeout; // 连接超时时间
+    protected volatile int socketTimeout; // Socket超时时间
     private volatile String connectTimeoutStr;
     private volatile String socketTimeoutSr;
 
@@ -142,14 +142,14 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
 
     protected volatile long timeBetweenEvictionRunsMillis = DEFAULT_TIME_BETWEEN_EVICTION_RUNS_MILLIS;
     protected volatile int numTestsPerEvictionRun = DEFAULT_NUM_TESTS_PER_EVICTION_RUN;
-    protected volatile long minEvictableIdleTimeMillis = DEFAULT_MIN_EVICTABLE_IDLE_TIME_MILLIS;
-    protected volatile long maxEvictableIdleTimeMillis = DEFAULT_MAX_EVICTABLE_IDLE_TIME_MILLIS;
+    protected volatile long minEvictableIdleTimeMillis = DEFAULT_MIN_EVICTABLE_IDLE_TIME_MILLIS; // 最小可驱逐空闲时间毫秒
+    protected volatile long maxEvictableIdleTimeMillis = DEFAULT_MAX_EVICTABLE_IDLE_TIME_MILLIS; // 最大可驱逐空闲时间毫秒
     protected volatile long keepAliveBetweenTimeMillis = DEFAULT_TIME_BETWEEN_EVICTION_RUNS_MILLIS * 2;
-    protected volatile long phyTimeoutMillis = DEFAULT_PHY_TIMEOUT_MILLIS;
-    protected volatile long phyMaxUseCount = -1;
+    protected volatile long phyTimeoutMillis = DEFAULT_PHY_TIMEOUT_MILLIS; // 物理超时毫秒
+    protected volatile long phyMaxUseCount = -1; // 连接设置的最大使用次数（超过次数要回收连接）
 
     protected volatile boolean removeAbandoned;
-    protected volatile long removeAbandonedTimeoutMillis = 300 * 1000;
+    protected volatile long removeAbandonedTimeoutMillis = 300 * 1000; // 超时时间（一个连接超过该时间，且不运行，则可能存在连接泄露，需要自动回收）
     protected volatile boolean logAbandoned;
 
     protected volatile int maxOpenPreparedStatements = -1;
@@ -164,7 +164,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
 
     protected volatile boolean usePingMethod;
 
-    protected final Map<DruidPooledConnection, Object> activeConnections = new IdentityHashMap<DruidPooledConnection, Object>();
+    protected final Map<DruidPooledConnection, Object> activeConnections = new IdentityHashMap<DruidPooledConnection, Object>(); // 活跃连接
     protected static final Object PRESENT = new Object();
 
     protected long id;
@@ -235,11 +235,11 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     protected boolean isMySql;
     protected boolean useOracleImplicitCache = true;
 
-    protected ReentrantLock lock;
-    protected Condition notEmpty;
+    protected ReentrantLock lock; // 可重入锁，用户可创建、可回收的加锁处理
+    protected Condition notEmpty; //
     protected Condition empty;
 
-    protected ReentrantLock activeConnectionLock = new ReentrantLock();
+    protected ReentrantLock activeConnectionLock = new ReentrantLock(); // 活跃连接锁
 
     protected volatile int createErrorCount;
     protected volatile int creatingCount;
@@ -252,7 +252,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     static final AtomicIntegerFieldUpdater<DruidAbstractDataSource> creatingCountUpdater = AtomicIntegerFieldUpdater.newUpdater(DruidAbstractDataSource.class, "creatingCount");
     static final AtomicIntegerFieldUpdater<DruidAbstractDataSource> directCreateCountUpdater = AtomicIntegerFieldUpdater.newUpdater(DruidAbstractDataSource.class, "directCreateCount");
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> createCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "createCount");
-    static final AtomicLongFieldUpdater<DruidAbstractDataSource> destroyCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "destroyCount");
+    static final AtomicLongFieldUpdater<DruidAbstractDataSource> destroyCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "destroyCount"); // 线程安全的更新销毁连接数destroyCount
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> createStartNanosUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "createStartNanos");
 
     private Boolean useUnfairLock;
@@ -266,8 +266,8 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     protected boolean failFast;
     protected volatile int failContinuous;
     protected volatile long failContinuousTimeMillis;
-    protected ScheduledExecutorService destroyScheduler;
-    protected ScheduledExecutorService createScheduler;
+    protected ScheduledExecutorService destroyScheduler; // 销毁连接定时任务线程池
+    protected ScheduledExecutorService createScheduler; // 创建连接定时任务线程池
     protected Executor netTimeoutExecutor;
     protected volatile boolean netTimeoutError;
 
@@ -276,11 +276,11 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
 
     protected boolean initVariants;
     protected boolean initGlobalVariants;
-    protected volatile boolean onFatalError;
+    protected volatile boolean onFatalError; // 是否致命错误
     protected volatile int onFatalErrorMaxActive;
-    protected volatile int fatalErrorCount;
-    protected volatile int fatalErrorCountLastShrink;
-    protected volatile long lastFatalErrorTimeMillis;
+    protected volatile int fatalErrorCount; // 致命错误计数
+    protected volatile int fatalErrorCountLastShrink; // 致命错误计数最后一次收缩
+    protected volatile long lastFatalErrorTimeMillis; // 最近一次发生错误的时间
     protected volatile String lastFatalErrorSql;
     protected volatile Throwable lastFatalError;
     protected volatile Throwable keepAliveError;
