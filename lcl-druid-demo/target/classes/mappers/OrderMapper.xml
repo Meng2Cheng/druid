@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.lcl.galaxy.lcl.galaxy.druid.dao.OrderNewMapper">
+
+
+    <resultMap id="BaseResultMap" type="com.lcl.galaxy.lcl.galaxy.druid.domain.OrderInfoNew">
+        <id column="id" property="id" jdbcType="BIGINT"/>
+        <result column="order_id" property="orderId" jdbcType="BIGINT"/>
+        <result column="vender_id" property="venderId" jdbcType="VARCHAR"/>
+    </resultMap>
+    <sql id="Base_Column_List">
+        id, order_id, vender_id
+    </sql>
+
+
+    <select id="findAll" resultMap="BaseResultMap">
+        select
+        <include refid="Base_Column_List"/>
+        from order_info_new
+    </select>
+
+    <delete id="deleteByVenderId" parameterType="int">
+        delete from order_info_new where vender_id = #{venderId}
+    </delete>
+
+
+</mapper>
