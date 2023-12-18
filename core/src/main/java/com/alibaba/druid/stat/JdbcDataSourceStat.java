@@ -53,6 +53,7 @@ public class JdbcDataSourceStat implements JdbcDataSourceStatMBean {
 
     private final AtomicLong skipSqlCount = new AtomicLong();
 
+    // 连接持有时间分布
     private final Histogram connectionHoldHistogram = new Histogram(new long[]{ //
             //
             1, 10, 100, 1000, 10 * 1000, //
@@ -65,8 +66,11 @@ public class JdbcDataSourceStat implements JdbcDataSourceStatMBean {
             0.75f,
             1);
 
+    // Clob打开次数
     private final AtomicLong clobOpenCount = new AtomicLong();
+    // Blob打开次数
     private final AtomicLong blobOpenCount = new AtomicLong();
+    // KeepAlive检测次数
     private final AtomicLong keepAliveCheckCount = new AtomicLong();
 
     private boolean resetStatEnable = true;

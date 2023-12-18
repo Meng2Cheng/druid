@@ -85,42 +85,42 @@ public class DruidDataSource extends DruidAbstractDataSource
     private static final Log LOG = LogFactory.getLog(DruidDataSource.class);
     private static final long serialVersionUID = 1L;
     // stats 用于监控的统计数据
-    private volatile long recycleErrorCount;
+    private volatile long recycleErrorCount; // 逻辑连接回收重用次数
     private volatile long discardErrorCount;
     private volatile Throwable discardErrorLast;
-    private long connectCount; // 连接数
-    private long closeCount; // 关闭连接数
+    private long connectCount; // 逻辑连接打开次数
+    private long closeCount; // 逻辑连接关闭次数
     private volatile long connectErrorCount; // 异常连接数
     private long recycleCount;
     private long removeAbandonedCount; // 移除的疑似泄露连接数
-    private long notEmptyWaitCount; // 等待获取连接数
-    private long notEmptySignalCount; //
-    private long notEmptyWaitNanos;
-    private int keepAliveCheckCount;
-    private int activePeak;
-    private long activePeakTime;
-    private int poolingPeak;
-    private long poolingPeakTime;
+    private long notEmptyWaitCount; // 累计总次数
+    private long notEmptySignalCount; // 通知连接可用次数
+    private long notEmptyWaitNanos; // 等待总时长
+    private int keepAliveCheckCount; // KeepAlive检测次数
+    private int activePeak; // 活跃连接数峰值
+    private long activePeakTime; // 活跃连接数峰值时间
+    private int poolingPeak; // 池中连接数峰值
+    private long poolingPeakTime; // 池中连接数峰值时间
     private volatile int keepAliveCheckErrorCount; //
     private volatile Throwable keepAliveCheckErrorLast;
     // store
     private volatile DruidConnectionHolder[] connections; // 连接池数组，存储当前连接池中所有的连接
-    private int poolingCount; // 连接数
+    private int poolingCount; // 池中连接数
     private int activeCount; // 活跃连接数
-    private volatile long discardCount; // 回收连接数
-    private int notEmptyWaitThreadCount; //
-    private int notEmptyWaitThreadPeak;
+    private volatile long discardCount; // 校验失败废弃连接数
+    private int notEmptyWaitThreadCount; // 等待使用连接的线程数
+    private int notEmptyWaitThreadPeak; // 等待创建连接的峰值
     //
     private DruidConnectionHolder[] evictConnections; // 待清理数组，存储了需要回收的连接，用于线程回收
-    private DruidConnectionHolder[] keepAliveConnections; // 保活数组，存储了需要发送验证sql保活的连接，用于守护线程定时保持连接
-    private boolean[] connectionsFlag; //
-    private volatile DruidConnectionHolder[] shrinkBuffer; //
+    private DruidConnectionHolder[] keepAliveConnections; // 待探活的连接数组，存储了需要发送验证sql保活的连接，用于守护线程定时保持连接
+    private boolean[] connectionsFlag; // 连接标志数组，如果下标内容为true，说明是要探活或移除的连接，需要从连接池中移除
+    private volatile DruidConnectionHolder[] shrinkBuffer; // 可用连接临时复制数组
 
     // threads
     private volatile ScheduledFuture<?> destroySchedulerFuture; //
     private DestroyTask destroyTask; // 连接销毁线程
 
-    private volatile Future<?> createSchedulerFuture; //
+    private volatile Future<?> createSchedulerFuture; // 创建连接任务异步处理返回值接收类
 
     private CreateConnectionThread createConnectionThread; // 创建连接线程
     private DestroyConnectionThread destroyConnectionThread; //  连接销毁线程，调用的是destroyTask
@@ -128,29 +128,29 @@ public class DruidDataSource extends DruidAbstractDataSource
     private int createTaskCount; // 创建连接线程数量
 
     private volatile long createTaskIdSeed = 1L; //
-    private long[] createTasks; //
+    private long[] createTasks; // 需要创建连接的任务数组
 
     private final CountDownLatch initedLatch = new CountDownLatch(2); // 初始化线程池中使用，在初始化线程池时，需要初始化创建连接线程createConnectionThread和销毁连接线程destroyConnectionThread，这两个可以并发执行，因此使用initedLatch做异步同步转换
 
     private volatile boolean enable = true;
 
-    private boolean resetStatEnable = true;
-    private volatile long resetCount;
+    private boolean resetStatEnable = true; // 是否可以重置监控信息
+    private volatile long resetCount; // 重置次数
 
-    private String initStackTrace;
+    private String initStackTrace; // 连接池初始化堆栈信息
 
     private volatile boolean closing; // 连接状态：关闭中
     private volatile boolean closed; // 连接状态：关闭
     private long closeTimeMillis = -1L;
 
-    protected JdbcDataSourceStat dataSourceStat;
+    protected JdbcDataSourceStat dataSourceStat; // 数据源监控
 
-    private boolean useGlobalDataSourceStat;
+    private boolean useGlobalDataSourceStat; // 是否使用全局数据源
     private boolean mbeanRegistered;
     public static ThreadLocal<Long> waitNanosLocal = new ThreadLocal<Long>();
     private boolean logDifferentThread = true;
-    private volatile boolean keepAlive;
-    private boolean asyncInit;
+    private volatile boolean keepAlive; // 是否要保持心跳
+    private boolean asyncInit; // 异步创建连接标志
     protected boolean killWhenSocketReadTimeout;
     protected boolean checkExecuteTime;
 
@@ -160,10 +160,12 @@ public class DruidDataSource extends DruidAbstractDataSource
 
     protected static final AtomicLongFieldUpdater<DruidDataSource> recycleErrorCountUpdater
             = AtomicLongFieldUpdater.newUpdater(DruidDataSource.class, "recycleErrorCount");
+    // 逻辑连接错误次数
     protected static final AtomicLongFieldUpdater<DruidDataSource> connectErrorCountUpdater
             = AtomicLongFieldUpdater.newUpdater(DruidDataSource.class, "connectErrorCount");
     protected static final AtomicLongFieldUpdater<DruidDataSource> resetCountUpdater
             = AtomicLongFieldUpdater.newUpdater(DruidDataSource.class, "resetCount");
+    // 创建连接的任务id，防止并发
     protected static final AtomicLongFieldUpdater<DruidDataSource> createTaskIdSeedUpdater
             = AtomicLongFieldUpdater.newUpdater(DruidDataSource.class, "createTaskIdSeed");
     protected static final AtomicLongFieldUpdater<DruidDataSource> discardErrorCountUpdater
@@ -802,6 +804,48 @@ public class DruidDataSource extends DruidAbstractDataSource
         this.connectProperties = properties;
     }
 
+    /**
+     * 初始化连接池（本流程全程加锁）
+     *      1、设置各类参数
+     *          （1）设置初始化堆栈信息
+     *          （2）获取数据源id，同时设置connectionId、statementId、resultSetId、transactionId，保证使用连接id可以将一个执行串起来
+     *          （3）从封装的驱动url进行初始化数据源的驱动、名称、链接地址、过滤器集合，从jdbcUrl和配置类中设置connectTimeout和socketTimeout
+     *          （4）
+     *      2、初始化过滤器
+     *          （1）将上一步从url中解析的过滤器进行初始化
+     *          （2）将使用SPI方式的过滤器加载并初始化
+     *      3、验证参数配置是否合理
+     *          （1）最大连接数、最小连接数、初始化连接数
+     *          （2）日志打印间隔与全局数据源监控
+     *          （3）连接驱逐的最大时间间隔与最小时间间隔
+     *          （4）保活时间间隔与探活时间间隔
+     *      4、根据不同的数据库初始化职责类
+     *          （1）初始化数据库异常处理类exceptionSorter
+     *          （2）初始化数据库连接验证类validConnectionChecker
+     *          （3）对于验证信息的校验：校验连接验证先关的配置是否正确
+     *          （4）设置数据源监控：根据配置设置dataSourceStat，以及是否可以重置
+     *          （5）初始化各种连接数组：初始化连接池数组、待清理的连接数组、待探活的连接数组、连接标志数组、疑似泄露的连接数组，长度均为最大活跃连接数
+     *      5、创建连接
+     *          （1）如果初始化连接数不为0，则需要在初始化时时间创建指定个数的连接，根据配置，可以交由线程池创建，或由主线程创建
+     *          （2）主线程创建逻辑，循环创建物理连接并封装为DruidConnectionHolder并放入连接池中，同时累加连接池中连接数量、创建的连接数量、连接峰值数、连接峰值时间
+     *          （3）创建物理连接
+     *              a、创建物理连接
+     *              b、初始化物理连接：设置事务是否自动提交、是否只读、事务隔离级别、日志目录、执行初始化sql、参数Map集合、全局参数Map集合
+     *              c、使用validConnectionChecker或Statement验证连接是否正常
+     *              d、更新物理连接创建时间和创建数量统计，重置连续失败标志和创建失败信息
+     *              e、将物理连接封装为 PhysicalConnectionInfo，其包括了：物理连接、连接开始时间、连接初始化时间、连接验证时间、参数Map集合、全局参数Map集合
+     *          （4）将物理连接封装为DruidConnectionHolder
+     *              a、设置数据源、物理连接、创建时间、参数Map、全局参数Map、连接时间、上次活跃时间、上次执行时间、底层自动提交、连接ID、底层长链接能力、默认事务隔离级别、默认事务自动提交、默认事务隔离级别、默认只读标识
+     *      6、创建三大线程
+     *          （1）日志线程
+     *          （2）创建连接线程
+     *          （3）销毁连接线程
+     *      7、初始化成功处理
+     *          （1）更新连接池初始化完成时间
+     *          （2）唤醒所有等待获取连接的线程可以获取连接
+     *
+     * @throws SQLException
+     */
     public void init() throws SQLException {
         if (inited) {
             return;
@@ -817,6 +861,7 @@ public class DruidDataSource extends DruidAbstractDataSource
             throw new SQLException("interrupt", e);
         }
 
+        // 如果已经初始化，不作处理
         boolean init = false;
         try {
             if (inited) {
@@ -825,6 +870,7 @@ public class DruidDataSource extends DruidAbstractDataSource
 
             initStackTrace = Utils.toString(Thread.currentThread().getStackTrace());
 
+            // 获取数据源id，同时设置connectionId、statementId、resultSetId、transactionId
             this.id = DruidDriver.createDataSourceId();
             if (this.id > 1) {
                 long delta = (this.id - 1) * 100000;
@@ -834,10 +880,11 @@ public class DruidDataSource extends DruidAbstractDataSource
                 this.transactionIdSeedUpdater.addAndGet(this, delta);
             }
 
+            // 设置连接超时时间，如果没有设置，取默认值 10000
             if (connectTimeout == 0) {
                 connectTimeout = DEFAULT_TIME_CONNECT_TIMEOUT_MILLIS;
             }
-
+            // 设置TCP连接超时时间，如果没有设置，取默认值 10000
             if (socketTimeout == 0) {
                 socketTimeout = DEFAULT_TIME_SOCKET_TIMEOUT_MILLIS;
             }
@@ -846,7 +893,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                 this.jdbcUrl = this.jdbcUrl.trim();
                 // 从封装的驱动url进行初始化数据源的驱动、名称、链接地址、过滤器集合
                 initFromWrapDriverUrl();
-                // 初始化连接超时时间和Socket超时时间
+                // 从jdbcUrl和配置类中设置connectTimeout和socketTimeout
                 initFromUrlOrProperties();
             }
 
@@ -872,6 +919,9 @@ public class DruidDataSource extends DruidAbstractDataSource
                 }
             }
 
+            /**
+             * 校验相关启动参数配置是否符合要求
+             */
             if (maxActive <= 0) {
                 throw new IllegalArgumentException("illegal maxActive " + maxActive);
             }
@@ -900,19 +950,22 @@ public class DruidDataSource extends DruidAbstractDataSource
                 this.driverClass = driverClass.trim();
             }
 
-            // 使用SPI加载过滤器
+            // 使用SPI加载过滤器，放入过滤器集合
             initFromSPIServiceLoader();
-
+            // 解析驱动，设置数据库驱动和驱动类
             resolveDriver();
-
+            // 初始化验证，设置数据库类型
             initCheck();
 
             this.netTimeoutExecutor = new SynchronousExecutor();
-
+            // 根据不同的数据库初始化数据库异常类
             initExceptionSorter();
+            // 根据不同的数据库初始化数据库验证类
             initValidConnectionChecker();
+            // 校验验证连接设置是否正确
             validationQueryCheck();
 
+            // 设置数据源监控
             if (isUseGlobalDataSourceStat()) {
                 dataSourceStat = JdbcDataSourceStat.getGlobal();
                 if (dataSourceStat == null) {
@@ -925,8 +978,9 @@ public class DruidDataSource extends DruidAbstractDataSource
             } else {
                 dataSourceStat = new JdbcDataSourceStat(this.name, this.jdbcUrl, this.dbTypeName, this.connectProperties);
             }
+            // 设置数据源监控是否可重置
             dataSourceStat.setResetStatEnable(this.resetStatEnable);
-
+            // 初始化连接池数组、待清理的连接数组、待探活的连接数组、连接标志数组、疑似泄露的连接数组，长度均为最大活跃连接数
             connections = new DruidConnectionHolder[maxActive];
             evictConnections = new DruidConnectionHolder[maxActive];
             keepAliveConnections = new DruidConnectionHolder[maxActive];
@@ -935,12 +989,15 @@ public class DruidDataSource extends DruidAbstractDataSource
 
             SQLException connectError = null;
 
+            // 创建连接
+            // 如果有创建连接线程池，且需要异步初始化，循环向线程池中添加需要创建的连接数
+            // 如果需要同步创建，则创建物理连接并封装为DruidConnectionHolder并放入连接池中
             if (createScheduler != null && asyncInit) {
                 for (int i = 0; i < initialSize; ++i) {
                     submitCreateTask(true);
                 }
             } else if (!asyncInit) {
-                // init connections
+                // 如果不是异步创建连接，则在主线程循环创建连接
                 while (poolingCount < initialSize) {
                     try {
                         PhysicalConnectionInfo pyConnectInfo = createPhysicalConnection();
@@ -963,20 +1020,27 @@ public class DruidDataSource extends DruidAbstractDataSource
                 }
             }
 
+            // 创建日志线程
             createAndLogThread();
+            // 创建 创建连接线程
             createAndStartCreatorThread();
+            // 创建 销毁连接线程
             createAndStartDestroyThread();
-
+            // 等待创建连接线程和销毁连接线程都执行完之后，再继续执行主线程
             initedLatch.await();
             init = true;
 
             initedTime = new Date();
+            // 注册MBEAN
             registerMbean();
 
             if (connectError != null && poolingCount == 0) {
                 throw connectError;
             }
 
+            // 如果要保持心跳
+            //      如果创建连接线程池不为空，则直接创建最小连接数的连接，
+            //      否则通知在empty上等待的线程，可以获取连接
             if (keepAlive) {
                 // async fill to minIdle
                 if (createScheduler != null) {
@@ -1019,6 +1083,9 @@ public class DruidDataSource extends DruidAbstractDataSource
         }
     }
 
+    /**
+     * 从jdbcUrl和配置类中设置connectTimeout和socketTimeout
+     */
     private void initFromUrlOrProperties() {
         if (jdbcUrl.startsWith("jdbc:mysql://") || jdbcUrl.startsWith("jdbc:mysql:loadbalance://")) {
             if (jdbcUrl.indexOf("connectTimeout=") != -1 || jdbcUrl.indexOf("socketTimeout=") != -1) {
@@ -1051,14 +1118,22 @@ public class DruidDataSource extends DruidAbstractDataSource
         }
     }
 
+    /**
+     * 向线程池提交创建连接
+     * @param initTask
+     */
     private void submitCreateTask(boolean initTask) {
+        // 创建连接数 +1
         createTaskCount++;
+        // 创建一个 创建连接任务
         CreateConnectionTask task = new CreateConnectionTask(initTask);
+        // 如果需要创建连接任务的数组没有初始化，则进行初始化
         if (createTasks == null) {
             createTasks = new long[8];
         }
 
         boolean putted = false;
+        // 将当前创建连接任务放入createTasks，实际存储的是任务id，由于int数组默认值为0，而任务id不会为0，因此循环到为0的任务数据后，表示该下标没有任务，直接赋值后停止循环
         for (int i = 0; i < createTasks.length; ++i) {
             if (createTasks[i] == 0) {
                 createTasks[i] = task.taskId;
@@ -1066,16 +1141,22 @@ public class DruidDataSource extends DruidAbstractDataSource
                 break;
             }
         }
+        // 如果任务数组满了，则将数组扩容1.5倍后放入
         if (!putted) {
             long[] array = new long[createTasks.length * 3 / 2];
             System.arraycopy(createTasks, 0, array, 0, createTasks.length);
             array[createTasks.length] = task.taskId;
             createTasks = array;
         }
-
+        // 将任务提交到线程池，并获取一个createSchedulerFuture
         this.createSchedulerFuture = createScheduler.submit(task);
     }
 
+    /**
+     * 清理该创建任务
+     * @param taskId
+     * @return
+     */
     private boolean clearCreateTask(long taskId) {
         if (createTasks == null) {
             return false;
@@ -1085,6 +1166,10 @@ public class DruidDataSource extends DruidAbstractDataSource
             return false;
         }
 
+        // 循环需要创建连接的任务数组，获取到当前任务，将其信息充值，重置信息包括：
+        //      创建连接数组中任务id置位0，表示该任务已被清理；
+        //      创建任务数 -1；
+        //      如果没有需要创建的连接，则将创建连接的任务数组长度置位初始值8
         for (int i = 0; i < createTasks.length; i++) {
             if (createTasks[i] == taskId) {
                 createTasks[i] = 0;
@@ -1108,6 +1193,9 @@ public class DruidDataSource extends DruidAbstractDataSource
         return false;
     }
 
+    /**
+     * 如果配置了打印当前配置时间间隔timeBetweenLogStatsMillis且大于0，则创建一个线程，每隔timeBetweenLogStatsMillis时间打印一次连接池中的信息
+     */
     private void createAndLogThread() {
         if (this.timeBetweenLogStatsMillis <= 0) {
             return;
@@ -1120,6 +1208,9 @@ public class DruidDataSource extends DruidAbstractDataSource
         this.resetStatEnable = false;
     }
 
+    /**
+     * 连接销毁线程
+     */
     protected void createAndStartDestroyThread() {
         destroyTask = new DestroyTask();
 
@@ -1795,6 +1886,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                             + lock.getQueueLength());
                 }
 
+                // 如果存在致命错误 且 致命错误的最大活跃数大于0 且 活跃线程数大于等于致命错误的最大活跃数，抛出异常
                 if (onFatalError
                         && onFatalErrorMaxActive > 0
                         && activeCount >= onFatalErrorMaxActive) {
@@ -1822,6 +1914,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                             errorMsg.toString(), lastFatalError);
                 }
 
+                // 连接数加一
                 connectCount++;
 
                 // 判断如果createScheduler存在，且executor.getQueue().size()大于0 那么将启用createDirect逻辑，退出本持循环
@@ -2412,8 +2505,10 @@ public class DruidDataSource extends DruidAbstractDataSource
     private DruidConnectionHolder pollLast(long nanos) throws InterruptedException, SQLException {
         long estimate = nanos;
 
+        // 使用自旋的方式获取连接
         for (; ; ) {
             if (poolingCount == 0) {
+                // 如果没有连接可用，则阻塞等待创建连接
                 emptySignal(); // send signal to CreateThread create connection
 
                 if (failFast && isFailContinuous()) {
@@ -2425,6 +2520,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                     return null;
                 }
 
+                // 等待创建线连接的线程数 +1，设置等待创建连接线程数峰值
                 notEmptyWaitThreadCount++;
                 if (notEmptyWaitThreadCount > notEmptyWaitThreadPeak) {
                     notEmptyWaitThreadPeak = notEmptyWaitThreadCount;
@@ -2435,6 +2531,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                     estimate = notEmpty.awaitNanos(estimate); // signal by
                     // recycle or
                     // creator
+                    // 等待创建连接数 +1
                     notEmptyWaitCount++;
                     notEmptyWaitNanos += (startEstimate - estimate);
 
@@ -2448,6 +2545,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                         throw new DataSourceDisableException();
                     }
                 } catch (InterruptedException ie) {
+                    // 如果线程被中断，通知等待创建连接的线程放行，同时将通知等待
                     notEmpty.signal(); // propagate to non-interrupted thread
                     notEmptySignalCount++;
                     throw ie;
@@ -2582,6 +2680,9 @@ public class DruidDataSource extends DruidAbstractDataSource
         }
     }
 
+    /**
+     * 打印连接池中当前配置信息
+     */
     public void logStats() {
         final DruidDataSourceStatLogger statLogger = this.statLogger;
         if (statLogger == null) {
@@ -2689,6 +2790,11 @@ public class DruidDataSource extends DruidAbstractDataSource
         return removeAbandonedCount;
     }
 
+    /**
+     * 将物理连接封装为DruidConnectionHolder，并放入连接池
+     * @param physicalConnectionInfo
+     * @return
+     */
     protected boolean put(PhysicalConnectionInfo physicalConnectionInfo) {
         DruidConnectionHolder holder = null;
         try {
@@ -2709,6 +2815,20 @@ public class DruidDataSource extends DruidAbstractDataSource
         return put(holder, physicalConnectionInfo.createTaskId, false);
     }
 
+    /**
+     * 将连接放入连接池（全程加锁）
+     *      （1）如果不满足条件，则不处理
+     *            a、连接池的状态不正确
+     *            b、连接已经达到上限（连接数大于等于最大连接数）
+     *            c、连接已经存在
+     *      （2）将连接放入可用连接数组connections，并更新连接数、连接数峰值和达到峰值的时间
+     *      （3）唤醒一个等待获取连接的线程，更新更新连接使用次数
+     *
+     * @param holder
+     * @param createTaskId
+     * @param checkExists
+     * @return
+     */
     private boolean put(DruidConnectionHolder holder, long createTaskId, boolean checkExists) {
         lock.lock();
         try {
@@ -2716,6 +2836,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                 return false;
             }
 
+            // 如果连接以达到上限，则移除该任务
             if (poolingCount >= maxActive) {
                 if (createScheduler != null) {
                     clearCreateTask(createTaskId);
@@ -2723,6 +2844,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                 return false;
             }
 
+            // 如果连接存在，则不处理
             if (checkExists) {
                 for (int i = 0; i < poolingCount; i++) {
                     if (connections[i] == holder) {
@@ -2731,17 +2853,22 @@ public class DruidDataSource extends DruidAbstractDataSource
                 }
             }
 
+            // 将连接放入可用连接数组connections
             connections[poolingCount] = holder;
             incrementPoolingCount();
 
+            // 设置连接数峰值
             if (poolingCount > poolingPeak) {
                 poolingPeak = poolingCount;
                 poolingPeakTime = System.currentTimeMillis();
             }
 
+            // 通知等待使用连接的线程
             notEmpty.signal();
+            // 更新连接使用次数
             notEmptySignalCount++;
 
+            // 清理待创建连接任务，
             if (createScheduler != null) {
                 clearCreateTask(createTaskId);
 
@@ -2757,14 +2884,18 @@ public class DruidDataSource extends DruidAbstractDataSource
     }
 
     public class CreateConnectionTask implements Runnable {
-        private int errorCount;
-        private boolean initTask;
-        private final long taskId;
+        private int errorCount; // 错误数
+        private boolean initTask; // 是否是初始化连接
+        private final long taskId; // 任务id
 
         public CreateConnectionTask() {
             taskId = createTaskIdSeedUpdater.getAndIncrement(DruidDataSource.this);
         }
 
+        /**
+         * 构造函数，设置任务id
+         * @param initTask
+         */
         public CreateConnectionTask(boolean initTask) {
             taskId = createTaskIdSeedUpdater.getAndIncrement(DruidDataSource.this);
             this.initTask = initTask;
@@ -2780,22 +2911,26 @@ public class DruidDataSource extends DruidAbstractDataSource
                 // addLast
                 lock.lock();
                 try {
+                    // 如果线程池处于关闭中或已关闭状态，则清理该创建任务
                     if (closed || closing) {
                         clearCreateTask(taskId);
                         return;
                     }
 
+                    // emptyWait为true表示生产连接线程需要等待，无需生产连接
                     boolean emptyWait = true;
 
+                    // 发生了创建错误，且池中已无连接，且丢弃连接的统计没有改变
+                    // 此时生产连接线程需要生产连接
                     if (createError != null && poolingCount == 0) {
                         emptyWait = false;
                     }
 
+                    // 等待创建连接
                     if (emptyWait) {
-                        // 必须存在线程等待，才创建连接
-                        if (poolingCount >= notEmptyWaitThreadCount //
-                                && (!(keepAlive && activeCount + poolingCount < minIdle)) // 在keepAlive场景不能放弃创建
-                                && (!initTask) // 线程池初始化时的任务不能放弃创建
+                        if (poolingCount >= notEmptyWaitThreadCount // 可用连接数大于等于等待使用的连接数
+                                && (!(keepAlive && activeCount + poolingCount < minIdle)) // 不需要keepAlive 或 活跃连接+可用连接<最小连接数
+                                && (!initTask) // 不是初始化创建连接
                                 && !isFailContinuous() // failContinuous时不能放弃创建，否则会无法创建线程
                                 && !isOnFatalError() // onFatalError时不能放弃创建，否则会无法创建线程
                         ) {
@@ -2815,15 +2950,18 @@ public class DruidDataSource extends DruidAbstractDataSource
 
                 PhysicalConnectionInfo physicalConnection = null;
 
+                // 创建物理连接
                 try {
                     physicalConnection = createPhysicalConnection();
                 } catch (OutOfMemoryError e) {
                     LOG.error("create connection OutOfMemoryError, out memory. ", e);
-
+                    // 如果发生异常，异常数 +1
                     errorCount++;
                     if (errorCount > connectionErrorRetryAttempts && timeBetweenConnectErrorMillis > 0) {
                         // fail over retry attempts
+                        // 更新连续失败的状态和时间
                         setFailContinuous(true);
+                        // 如果是快速失败，通知等待创建连接的线程，这样就可以做重试
                         if (failFast) {
                             lock.lock();
                             try {
@@ -2833,6 +2971,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                             }
                         }
 
+                        // 如果在失败后需要中断，则将该任务从任务数组中清除
                         if (breakAfterAcquireFailure) {
                             lock.lock();
                             try {
@@ -2843,7 +2982,9 @@ public class DruidDataSource extends DruidAbstractDataSource
                             return;
                         }
 
+                        // 重置错误数
                         this.errorCount = 0; // reset errorCount
+                        // 如果连接池处于关闭中或关闭状态，清理该创建连接任务
                         if (closing || closed) {
                             lock.lock();
                             try {
@@ -2853,7 +2994,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                             }
                             return;
                         }
-
+                        // 将该任务重新放入创建连接线程池
                         createSchedulerFuture = createScheduler.schedule(this, timeBetweenConnectErrorMillis, TimeUnit.MILLISECONDS);
                         return;
                     }
@@ -2929,6 +3070,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                     continue;
                 }
 
+                // 设置该连接对应的任务id
                 physicalConnection.createTaskId = taskId;
                 boolean result = put(physicalConnection);
                 if (!result) {
@@ -2940,6 +3082,39 @@ public class DruidDataSource extends DruidAbstractDataSource
         }
     }
 
+    /**
+     * 创建连接线程，使用自旋的方式创建连接（该线程是个守护线程）
+     *      1、是否要等待：如果满足以下条件之一（条件如下），则直接走创建流程，否则需要等待
+     *          （1）取反：是否上次创建连接失败：有创建错误信息、连接数量为0、在上次之前没有丢弃的连接
+     *          （2）取反：异步初始化，且创建的连接数小于初始化连接数
+     *          （3）以下全部满足
+     *              a、连接数已经超过了等待使用连接数
+     *              b、不需要keepAlive 或者 当前连接池中活跃连接和可用连接总和已经超过了最小连接数
+     *              c、不是连续失败
+     *          （4）活跃连接数+可用连接数已经超过了最大连接数
+     *      2、创建物理连接
+     *          （1）创建物理连接
+     *          （2）更新物理连接创建时间、创建个数
+     *          （3）重置是否连续失败标志、失败信息、
+     *      3、创建连接
+     *          （1）创建物理连接
+     *              a、创建物理连接
+     *              b、初始化物理连接：设置事务是否自动提交、是否只读、事务隔离级别、日志目录、执行初始化sql、参数Map集合、全局参数Map集合
+     *              c、使用validConnectionChecker或Statement验证连接是否正常
+     *              d、更新物理连接创建时间和创建数量统计，重置连续失败标志和创建失败信息
+     *              e、将物理连接封装为 PhysicalConnectionInfo，其包括了：物理连接、连接开始时间、连接初始化时间、连接验证时间、参数Map集合、全局参数Map集合
+     *          （2）将物理连接封装为DruidConnectionHolder
+     *              a、设置数据源、物理连接、创建时间、参数Map、全局参数Map、连接时间、上次活跃时间、上次执行时间、底层自动提交、连接ID、底层长链接能力、默认事务隔离级别、默认事务自动提交、默认事务隔离级别、默认只读标识
+     *      4、将连接放入连接池（全程加锁）
+     *          （1）如果不满足条件，则不处理
+     *              a、连接池的状态不正确
+     *              b、连接已经达到上限（连接数大于等于最大连接数）
+     *              c、连接已经存在
+     *          （2）将连接放入可用连接数组connections，并更新连接数、连接数峰值和达到峰值的时间
+     *          （3）唤醒一个等待获取连接的线程，更新更新连接使用次数
+     *      5、如果创建连接失败，则更新上一次创建错误内容和上一次创建失败时间
+     *
+     */
     public class CreateConnectionThread extends Thread {
         public CreateConnectionThread(String name) {
             super(name);
@@ -2960,7 +3135,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                 }
 
                 long discardCount = DruidDataSource.this.discardCount;
-                boolean discardChanged = discardCount - lastDiscardCount > 0;
+                boolean discardChanged = discardCount - lastDiscardCount > 0; // 是否从上一次之前就有丢弃的连接
                 lastDiscardCount = discardCount;
 
                 try {
@@ -2978,10 +3153,10 @@ public class DruidDataSource extends DruidAbstractDataSource
                     }
 
                     if (emptyWait) {
-                        // 必须存在线程等待，才创建连接
-                        if (poolingCount >= notEmptyWaitThreadCount //
-                                && (!(keepAlive && activeCount + poolingCount < minIdle))
-                                && !isFailContinuous()
+                        // 以下条件都满足，说明当前不能创建连接，需要等待
+                        if (poolingCount >= notEmptyWaitThreadCount // 可用线程数超过了等待使用线程数
+                                && (!(keepAlive && activeCount + poolingCount < minIdle)) // 不需要keepAlive 或者 当前连接池中活跃连接和可用连接总和已经超过了最小连接数
+                                && !isFailContinuous() // 不是连续失败
                         ) {
                             empty.await();
                         }
@@ -3049,7 +3224,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                 if (connection == null) {
                     continue;
                 }
-
+                // 将连接放入连接池
                 boolean result = put(connection);
                 if (!result) {
                     JdbcUtils.close(connection.getPhysicalConnection());
@@ -3065,6 +3240,10 @@ public class DruidDataSource extends DruidAbstractDataSource
         }
     }
 
+    /**
+     * 连接销毁线程
+     * 使用自旋处理
+     */
     public class DestroyConnectionThread extends Thread {
         public DestroyConnectionThread(String name) {
             super(name);
@@ -3081,6 +3260,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                         break;
                     }
 
+                    // 如果设置了检查空闲连接的频率，则每一次自旋要休眠
                     if (timeBetweenEvictionRunsMillis > 0) {
                         Thread.sleep(timeBetweenEvictionRunsMillis);
                     } else {
@@ -3100,14 +3280,19 @@ public class DruidDataSource extends DruidAbstractDataSource
 
     }
 
+    /**
+     * 连接回收线程
+     */
     public class DestroyTask implements Runnable {
         public DestroyTask() {
         }
 
         @Override
         public void run() {
+            // 回收
             shrink(true, keepAlive);
 
+            // 检测连接泄露
             if (isRemoveAbandoned()) {
                 removeAbandoned();
             }
@@ -3115,6 +3300,9 @@ public class DruidDataSource extends DruidAbstractDataSource
 
     }
 
+    /**
+     * 连接池信息日志打印线程
+     */
     public class LogStatsThread extends Thread {
         public LogStatsThread(String name) {
             super(name);
@@ -3138,6 +3326,12 @@ public class DruidDataSource extends DruidAbstractDataSource
         }
     }
 
+    /**
+     * 移除疑似泄露连接
+     *      检查所有活跃的连接，如果时间超过了设置移除超时时间，则直接从活跃连接集合中移除
+     *      然后关闭所有要移除的连接，同时更新相关统计数据
+     * @return
+     */
     public int removeAbandoned() {
         int removeCount = 0;
 
@@ -3279,6 +3473,18 @@ public class DruidDataSource extends DruidAbstractDataSource
         shrink(checkTime, keepAlive);
     }
 
+    /**
+     * 回收连接
+     *      从可用连接池中第一个循环，判断是否要回收和探活
+     *          如果需要探活，则将该连接放入探活数组，然后将连接数组中该标志置位true
+     *          如果需要回收，则将该连接放入探活数组，然后将连接数组中该标志置位true
+     *      重置连接数组，将可用连接（标志为false的连接）放入shrinkBuffer中，然后将连接数组清空，再将shrinkBuffer中连接放回连接数组，再清空shrinkBuffer（其实就是在两个数组间复制数据，用来清理不要的连接，然后保证连接是连续的）
+     *      如果存在需要回收的，就直接关闭连接
+     *      如果存在需要探活的，则验证sql，如果验证成功，则放回连接池，验证失败，则直接回收
+     *      操作完毕后，需要看是否需要补充连接，如果需要补充连接，则使用empty.signal()通知生产者创建新的连接
+     * @param checkTime
+     * @param keepAlive
+     */
     public void shrink(boolean checkTime, boolean keepAlive) {
         final Lock lock = this.lock;
         try {
@@ -3311,7 +3517,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                 }
 
                 if (checkTime) {
-                    // 当前时间 - 连接时间的间隔如果 大于 超时时间，则需要回收
+                    // 当前时间 - 连接时间的间隔如果 大于 物理连接超时时间，则需要回收
                     if (phyTimeoutMillis > 0) {
                         long phyConnectTimeMillis = currentTimeMillis - connection.connectTimeMillis;
                         if (phyConnectTimeMillis > phyTimeoutMillis) {
@@ -3816,6 +4022,7 @@ public class DruidDataSource extends DruidAbstractDataSource
         final int poolingPeak;
         final Date poolingPeakTime;
 
+        // 逻辑连接打开次数
         final long connectCount;
         final long closeCount;
 
@@ -3875,8 +4082,8 @@ public class DruidDataSource extends DruidAbstractDataSource
         dataMap.put("DefaultReadOnly", this.getDefaultReadOnly());
         dataMap.put("DefaultTransactionIsolation", this.getDefaultTransactionIsolation());
 
-        dataMap.put("LogicConnectCount", connectCount);
-        dataMap.put("LogicCloseCount", closeCount);
+        dataMap.put("LogicConnectCount", connectCount); // 逻辑连接打开次数
+        dataMap.put("LogicCloseCount", closeCount); // 逻辑连接关闭次数
         dataMap.put("LogicConnectErrorCount", this.getConnectErrorCount());
 
         dataMap.put("PhysicalConnectCount", this.getCreateCount());
@@ -4110,18 +4317,21 @@ public class DruidDataSource extends DruidAbstractDataSource
     }
 
     private void emptySignal() {
+        // 创建连接的线程池为空，则通知等待在empty上的线程
         if (createScheduler == null) {
             empty.signal();
             return;
         }
-
+        // 如果创建连接池不为空，则判断创建任务数是否大于最大创建任务数，如果大于，则不处理
         if (createTaskCount >= maxCreateTaskCount) {
             return;
         }
 
+        // 活跃线程数+可用线程数+创建中的线程数 是否大于等于 最大活跃线程数，如果是，则不需要创建，直接返回
         if (activeCount + poolingCount + createTaskCount >= maxActive) {
             return;
         }
+        // 提交创建线程任务，该任务不是初始化任务
         submitCreateTask(false);
     }
 

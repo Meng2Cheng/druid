@@ -52,11 +52,11 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
     protected volatile boolean closed; // 连接状态：是否已关闭
     static AtomicIntegerFieldUpdater CLOSING_UPDATER = AtomicIntegerFieldUpdater.newUpdater(DruidPooledConnection.class, "closing"); // 线程安全的更新 closing
     protected final Thread ownerThread; // 拥有连接的线程
-    private long connectedTimeMillis;
-    private long connectedTimeNano; // 连接超时时间
+    private long connectedTimeMillis; // 连接事件
+    private long connectedTimeNano; // 连接时间
     private volatile boolean running; // 连接状态：是否正在运行
     private volatile boolean abandoned; // 连接状态：已经被移除（疑似连接泄露）
-    protected StackTraceElement[] connectStackTrace;
+    protected StackTraceElement[] connectStackTrace; // 活跃连接堆栈查看
     protected Throwable disableError;
     final ReentrantLock lock;
     protected volatile int closing;

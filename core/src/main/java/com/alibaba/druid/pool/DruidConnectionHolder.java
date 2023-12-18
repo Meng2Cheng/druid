@@ -70,14 +70,14 @@ public final class DruidConnectionHolder {
     private final long createNanoSpan;
     protected PreparedStatementPool statementPool;
     protected final List<Statement> statementTrace = new ArrayList<Statement>(2);
-    protected final boolean defaultReadOnly;
-    protected final int defaultHoldability;
-    protected final int defaultTransactionIsolation;
-    protected final boolean defaultAutoCommit;
-    protected boolean underlyingReadOnly;
-    protected int underlyingHoldability;
-    protected int underlyingTransactionIsolation;
-    protected boolean underlyingAutoCommit;
+    protected final boolean defaultReadOnly; // 默认只读标识
+    protected final int defaultHoldability; // 默认长链接能力
+    protected final int defaultTransactionIsolation; // 默认事务隔离级别
+    protected final boolean defaultAutoCommit; // 默认事务自动提交
+    protected boolean underlyingReadOnly; // 磁层只读标识
+    protected int underlyingHoldability; // 底层长链接能力 todo
+    protected int underlyingTransactionIsolation; // 底层事务隔离级别
+    protected boolean underlyingAutoCommit; // 底层事务自动提交
     protected volatile boolean discard; // 连接状态：是否已丢弃
     protected volatile boolean active; // 连接状态：是否活跃连接
     protected final Map<String, Object> variables;
@@ -104,6 +104,16 @@ public final class DruidConnectionHolder {
         this(dataSource, conn, connectNanoSpan, null, null);
     }
 
+    /**
+     * 将物理连接封装为 DruidConnectionHolder
+     *      设置数据源、物理连接、创建时间、参数Map、全局参数Map、连接时间、上次活跃时间、上次执行时间、底层自动提交、连接ID、底层长链接能力、默认事务隔离级别、默认事务自动提交、默认事务隔离级别、默认只读标识
+     * @param dataSource
+     * @param conn
+     * @param connectNanoSpan
+     * @param variables
+     * @param globalVariables
+     * @throws SQLException
+     */
     public DruidConnectionHolder(
             DruidAbstractDataSource dataSource,
             Connection conn,

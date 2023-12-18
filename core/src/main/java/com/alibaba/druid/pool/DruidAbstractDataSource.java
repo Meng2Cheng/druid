@@ -64,29 +64,29 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     private static final long serialVersionUID = 1L;
     private static final Log LOG = LogFactory.getLog(DruidAbstractDataSource.class);
 
-    public static final int DEFAULT_INITIAL_SIZE = 0;
-    public static final int DEFAULT_MAX_ACTIVE_SIZE = 8;
-    public static final int DEFAULT_MAX_IDLE = 8;
-    public static final int DEFAULT_MIN_IDLE = 0;
-    public static final int DEFAULT_MAX_WAIT = -1;
-    public static final String DEFAULT_VALIDATION_QUERY = null;                                                //
-    public static final boolean DEFAULT_TEST_ON_BORROW = false;
-    public static final boolean DEFAULT_TEST_ON_RETURN = false;
-    public static final boolean DEFAULT_WHILE_IDLE = true;
-    public static final long DEFAULT_TIME_BETWEEN_EVICTION_RUNS_MILLIS = 60 * 1000L;
-    public static final long DEFAULT_TIME_BETWEEN_CONNECT_ERROR_MILLIS = 500;
-    public static final int DEFAULT_NUM_TESTS_PER_EVICTION_RUN = 3;
-    public static final int DEFAULT_TIME_CONNECT_TIMEOUT_MILLIS = 10_000;
-    public static final int DEFAULT_TIME_SOCKET_TIMEOUT_MILLIS = 10_000;
+    public static final int DEFAULT_INITIAL_SIZE = 0; // 初始连接数，默认为0
+    public static final int DEFAULT_MAX_ACTIVE_SIZE = 8; // 最大活跃连接数默认值
+    public static final int DEFAULT_MAX_IDLE = 8; // 默认最大连接数
+    public static final int DEFAULT_MIN_IDLE = 0; // 最小连接数默认值
+    public static final int DEFAULT_MAX_WAIT = -1; // 默认最大等待时间
+    public static final String DEFAULT_VALIDATION_QUERY = null; // 默认验证sql
+    public static final boolean DEFAULT_TEST_ON_BORROW = false; // 获取连接时检测
+    public static final boolean DEFAULT_TEST_ON_RETURN = false; // 连接放回连接池时检测
+    public static final boolean DEFAULT_WHILE_IDLE = true; // 空闲时检测
+    public static final long DEFAULT_TIME_BETWEEN_EVICTION_RUNS_MILLIS = 60 * 1000L; // 检查空闲连接的频率，默认值为1分钟
+    public static final long DEFAULT_TIME_BETWEEN_CONNECT_ERROR_MILLIS = 500; // 连接出错后重试时间间隔，默认 0.5秒
+    public static final int DEFAULT_NUM_TESTS_PER_EVICTION_RUN = 3; // 每次驱逐运行的测试数 todo
+    public static final int DEFAULT_TIME_CONNECT_TIMEOUT_MILLIS = 10_000; // 连接超时时间默认值
+    public static final int DEFAULT_TIME_SOCKET_TIMEOUT_MILLIS = 10_000; // TCP连接超时时间默认值
 
-    public static final long DEFAULT_MIN_EVICTABLE_IDLE_TIME_MILLIS = 1000L * 60L * 30L;
-    public static final long DEFAULT_MAX_EVICTABLE_IDLE_TIME_MILLIS = 1000L * 60L * 60L * 7;
-    public static final long DEFAULT_PHY_TIMEOUT_MILLIS = -1;
+    public static final long DEFAULT_MIN_EVICTABLE_IDLE_TIME_MILLIS = 1000L * 60L * 30L; // 最小可驱逐空闲时间毫秒
+    public static final long DEFAULT_MAX_EVICTABLE_IDLE_TIME_MILLIS = 1000L * 60L * 60L * 7; // 最大可驱逐空闲时间毫秒
+    public static final long DEFAULT_PHY_TIMEOUT_MILLIS = -1; // 物理超时毫秒
 
-    protected volatile boolean defaultAutoCommit = true;
-    protected volatile Boolean defaultReadOnly;
-    protected volatile Integer defaultTransactionIsolation;
-    protected volatile String defaultCatalog;
+    protected volatile boolean defaultAutoCommit = true; // 默认autocommit设置
+    protected volatile Boolean defaultReadOnly; // 默认只读设置
+    protected volatile Integer defaultTransactionIsolation; // 默认事务隔离
+    protected volatile String defaultCatalog; // 默认目录
 
     protected String name;
 
@@ -97,60 +97,61 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     protected volatile ClassLoader driverClassLoader; // 数据库驱动类加载器
     protected volatile Properties connectProperties = new Properties(); // 连接配置
 
-    protected volatile PasswordCallback passwordCallback;
-    protected volatile NameCallback userCallback;
+    protected volatile PasswordCallback passwordCallback; // 密码回调（例如加密）
+    protected volatile NameCallback userCallback; // 用户名回调（例如加密）
 
-    protected volatile int initialSize = DEFAULT_INITIAL_SIZE;
-    protected volatile int maxActive = DEFAULT_MAX_ACTIVE_SIZE; // 最大活跃连接数
-    protected volatile int minIdle = DEFAULT_MIN_IDLE;
-    protected volatile int maxIdle = DEFAULT_MAX_IDLE;
-    protected volatile long maxWait = DEFAULT_MAX_WAIT;
-    protected int notFullTimeoutRetryCount;
+    protected volatile int initialSize = DEFAULT_INITIAL_SIZE; // 初始连接数，默认为0
+    protected volatile int maxActive = DEFAULT_MAX_ACTIVE_SIZE; // 最大活跃连接数，默认为8
+    protected volatile int minIdle = DEFAULT_MIN_IDLE; // 最小连接数，默认为0
+    protected volatile int maxIdle = DEFAULT_MAX_IDLE; // 最大连接数
+    protected volatile long maxWait = DEFAULT_MAX_WAIT; // 最大等待时间
+    protected int notFullTimeoutRetryCount; // 获取连接最大重试次数
 
-    protected volatile String validationQuery = DEFAULT_VALIDATION_QUERY;
-    protected volatile int validationQueryTimeout = -1;
-    protected volatile boolean testOnBorrow = DEFAULT_TEST_ON_BORROW;
-    protected volatile boolean testOnReturn = DEFAULT_TEST_ON_RETURN;
-    protected volatile boolean testWhileIdle = DEFAULT_WHILE_IDLE;
+    protected volatile String validationQuery = DEFAULT_VALIDATION_QUERY; // 验证sql
+    protected volatile int validationQueryTimeout = -1; // 验证sql超时时间
+    protected volatile boolean testOnBorrow = DEFAULT_TEST_ON_BORROW; // 获取连接时检测
+    protected volatile boolean testOnReturn = DEFAULT_TEST_ON_RETURN; // 连接放回连接池时检测
+    protected volatile boolean testWhileIdle = DEFAULT_WHILE_IDLE; // 空闲时检测
     protected volatile boolean poolPreparedStatements;
     protected volatile boolean sharePreparedStatements;
     protected volatile int maxPoolPreparedStatementPerConnectionSize = 10;
 
-    protected volatile boolean inited;
+    protected volatile boolean inited; // 连接池是否已经初始化
     protected volatile boolean initExceptionThrow = true;
 
     protected PrintWriter logWriter = new PrintWriter(System.out);
 
-    protected List<Filter> filters = new CopyOnWriteArrayList<Filter>();
+    protected List<Filter> filters = new CopyOnWriteArrayList<Filter>(); // 过滤器集合
     private boolean clearFiltersEnable = true;
-    protected volatile ExceptionSorter exceptionSorter;
+    protected volatile ExceptionSorter exceptionSorter; // ExceptionSorter类名
 
-    protected Driver driver;
+    protected Driver driver; // 数据库驱动
 
     protected volatile int connectTimeout; // 连接超时时间
     protected volatile int socketTimeout; // Socket超时时间
     private volatile String connectTimeoutStr;
     private volatile String socketTimeoutSr;
 
-    protected volatile int queryTimeout; // seconds
-    protected volatile int transactionQueryTimeout; // seconds
+    protected volatile int queryTimeout; // 查询超时时间 seconds
+    protected volatile int transactionQueryTimeout; // 事务查询超时时间 seconds
 
+    // 创建物理连接总耗时
     protected long createTimespan;
 
-    protected volatile int maxWaitThreadCount = -1;
-    protected volatile boolean accessToUnderlyingConnectionAllowed = true;
+    protected volatile int maxWaitThreadCount = -1; // 最大等待线程数
+    protected volatile boolean accessToUnderlyingConnectionAllowed = true; // 是否允许访问底层连接
 
-    protected volatile long timeBetweenEvictionRunsMillis = DEFAULT_TIME_BETWEEN_EVICTION_RUNS_MILLIS;
-    protected volatile int numTestsPerEvictionRun = DEFAULT_NUM_TESTS_PER_EVICTION_RUN;
+    protected volatile long timeBetweenEvictionRunsMillis = DEFAULT_TIME_BETWEEN_EVICTION_RUNS_MILLIS; // 检查空闲连接的频率，默认值为1分钟
+    protected volatile int numTestsPerEvictionRun = DEFAULT_NUM_TESTS_PER_EVICTION_RUN; // 每次驱逐运行的测试数 todo
     protected volatile long minEvictableIdleTimeMillis = DEFAULT_MIN_EVICTABLE_IDLE_TIME_MILLIS; // 最小可驱逐空闲时间毫秒
     protected volatile long maxEvictableIdleTimeMillis = DEFAULT_MAX_EVICTABLE_IDLE_TIME_MILLIS; // 最大可驱逐空闲时间毫秒
-    protected volatile long keepAliveBetweenTimeMillis = DEFAULT_TIME_BETWEEN_EVICTION_RUNS_MILLIS * 2;
+    protected volatile long keepAliveBetweenTimeMillis = DEFAULT_TIME_BETWEEN_EVICTION_RUNS_MILLIS * 2; // 保活时间间隔
     protected volatile long phyTimeoutMillis = DEFAULT_PHY_TIMEOUT_MILLIS; // 物理超时毫秒
     protected volatile long phyMaxUseCount = -1; // 连接设置的最大使用次数（超过次数要回收连接）
 
-    protected volatile boolean removeAbandoned;
+    protected volatile boolean removeAbandoned; // 是否要移除疑似泄露的连接
     protected volatile long removeAbandonedTimeoutMillis = 300 * 1000; // 超时时间（一个连接超过该时间，且不运行，则可能存在连接泄露，需要自动回收）
-    protected volatile boolean logAbandoned;
+    protected volatile boolean logAbandoned; // 是否丢弃日志
 
     protected volatile int maxOpenPreparedStatements = -1;
 
@@ -158,51 +159,57 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
 
     protected volatile String dbTypeName;
 
-    protected volatile long timeBetweenConnectErrorMillis = DEFAULT_TIME_BETWEEN_CONNECT_ERROR_MILLIS;
+    protected volatile long timeBetweenConnectErrorMillis = DEFAULT_TIME_BETWEEN_CONNECT_ERROR_MILLIS; // 连接出错后重试时间间隔，默认 0.5秒
 
-    protected volatile ValidConnectionChecker validConnectionChecker;
+    protected volatile ValidConnectionChecker validConnectionChecker; // 连接有效性检查类名
 
     protected volatile boolean usePingMethod;
 
     protected final Map<DruidPooledConnection, Object> activeConnections = new IdentityHashMap<DruidPooledConnection, Object>(); // 活跃连接
     protected static final Object PRESENT = new Object();
 
-    protected long id;
+    protected long id; // 数据源ID
 
-    protected int connectionErrorRetryAttempts = 1;
-    protected boolean breakAfterAcquireFailure;
+    protected int connectionErrorRetryAttempts = 1; // 连接错误重试次数
+    protected boolean breakAfterAcquireFailure; // 失败后是否需要中断
     protected long transactionThresholdMillis;
 
     protected final java.util.Date createdTime = new java.util.Date();
-    protected java.util.Date initedTime;
-    protected volatile long errorCount;
+    protected java.util.Date initedTime; // 初始化完成时间
+    protected volatile long errorCount; // 错误数
     protected volatile long dupCloseCount;
     protected volatile long startTransactionCount;
-    protected volatile long commitCount;
-    protected volatile long rollbackCount;
-    protected volatile long cachedPreparedStatementHitCount;
-    protected volatile long preparedStatementCount;
-    protected volatile long closedPreparedStatementCount;
-    protected volatile long cachedPreparedStatementCount;
-    protected volatile long cachedPreparedStatementDeleteCount;
-    protected volatile long cachedPreparedStatementMissCount;
+    protected volatile long commitCount;    // 提交数
+    protected volatile long rollbackCount;     // 回滚数
+    protected volatile long cachedPreparedStatementHitCount; // PSCache缓存命中次数
+    protected volatile long preparedStatementCount; // PSCache数量
+    protected volatile long closedPreparedStatementCount; // PSCache关闭数
+    protected volatile long cachedPreparedStatementCount; // PSCache缓存数量
+    protected volatile long cachedPreparedStatementDeleteCount; // PSCache缓存删除数
+    protected volatile long cachedPreparedStatementMissCount; // PSCache缓存不命中次数
 
     private volatile FilterChainImpl filterChain;
 
+    // 错误数
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> errorCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "errorCount");
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> dupCloseCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "dupCloseCount");
+    // 事务启动数
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> startTransactionCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "startTransactionCount");
+    // 提交数
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> commitCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "commitCount");
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> rollbackCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "rollbackCount");
+    // PSCache命中次数
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> cachedPreparedStatementHitCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "cachedPreparedStatementHitCount");
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> preparedStatementCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "preparedStatementCount");
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> closedPreparedStatementCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "closedPreparedStatementCount");
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> cachedPreparedStatementCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "cachedPreparedStatementCount");
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> cachedPreparedStatementDeleteCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "cachedPreparedStatementDeleteCount");
+    // PSCache不命中次数
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> cachedPreparedStatementMissCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "cachedPreparedStatementMissCount");
     protected static final AtomicReferenceFieldUpdater<DruidAbstractDataSource, FilterChainImpl> filterChainUpdater
             = AtomicReferenceFieldUpdater.newUpdater(DruidAbstractDataSource.class, FilterChainImpl.class, "filterChain");
 
+    // 事务时间分布
     protected final Histogram transactionHistogram = new Histogram(1,
             10,
             100,
@@ -214,75 +221,87 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
 
     private ObjectName objectName;
 
-    protected volatile long executeCount;
-    protected volatile long executeQueryCount;
-    protected volatile long executeUpdateCount;
-    protected volatile long executeBatchCount;
+    protected volatile long executeCount; // sql执行数
+    protected volatile long executeQueryCount; // 统计sql执行次数
+    protected volatile long executeUpdateCount; // 更新sql执行次数
+    protected volatile long executeBatchCount; // 批处理sql执行次数
 
+    /**
+     * sql统计次数线程安全类
+     */
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> executeQueryCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "executeQueryCount");
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> executeUpdateCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "executeUpdateCount");
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> executeBatchCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "executeBatchCount");
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> executeCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "executeCount");
 
-    protected volatile Throwable createError;
-    protected volatile Throwable lastError;
-    protected volatile long lastErrorTimeMillis;
-    protected volatile Throwable lastCreateError;
-    protected volatile long lastCreateErrorTimeMillis;
+    protected volatile Throwable createError; // 创建连接错误信息
+    protected volatile Throwable lastError; // 最近一次错误信息
+    protected volatile long lastErrorTimeMillis; // 最近一次错误时间
+    protected volatile Throwable lastCreateError; //  最近一次创建连接错误信息
+    protected volatile long lastCreateErrorTimeMillis; // 最近一次创建连接错误时间
     protected volatile long lastCreateStartTimeMillis;
 
+    // 数据库类型
     protected boolean isOracle;
     protected boolean isMySql;
     protected boolean useOracleImplicitCache = true;
 
     protected ReentrantLock lock; // 可重入锁，用户可创建、可回收的加锁处理
-    protected Condition notEmpty; //
-    protected Condition empty;
+    protected Condition notEmpty; // 连接池没有可用连接时，应用线程会在notEmpty上等待，
+    protected Condition empty; // 连接池已满时，生产连接的线程会在empty上等待
 
     protected ReentrantLock activeConnectionLock = new ReentrantLock(); // 活跃连接锁
 
-    protected volatile int createErrorCount;
-    protected volatile int creatingCount;
-    protected volatile int directCreateCount;
-    protected volatile long createCount;
-    protected volatile long destroyCount;
-    protected volatile long createStartNanos;
+    protected volatile int createErrorCount; // 物理连接错误次数
+    protected volatile int creatingCount;  // 创建物理连接数量统计
+    protected volatile int directCreateCount; // 直接创建数量
+    protected volatile long createCount; // 物理连接打开次数
+    protected volatile long destroyCount;  // 物理关闭数量
+    protected volatile long createStartNanos; // 创建连接开始时间
 
+    // 物理连接错误次数
     static final AtomicIntegerFieldUpdater<DruidAbstractDataSource> createErrorCountUpdater = AtomicIntegerFieldUpdater.newUpdater(DruidAbstractDataSource.class, "createErrorCount");
+    // 创建物理连接数量统计
     static final AtomicIntegerFieldUpdater<DruidAbstractDataSource> creatingCountUpdater = AtomicIntegerFieldUpdater.newUpdater(DruidAbstractDataSource.class, "creatingCount");
+    // 直接创建数量
     static final AtomicIntegerFieldUpdater<DruidAbstractDataSource> directCreateCountUpdater = AtomicIntegerFieldUpdater.newUpdater(DruidAbstractDataSource.class, "directCreateCount");
+    // 物理连接打开次数
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> createCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "createCount");
+    // 物理关闭数量
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> destroyCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "destroyCount"); // 线程安全的更新销毁连接数destroyCount
+    // 创建连接开始时间
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> createStartNanosUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "createStartNanos");
 
-    private Boolean useUnfairLock;
-    private boolean useLocalSessionState = true;
+    private Boolean useUnfairLock; // 是否使用公平锁
+    private boolean useLocalSessionState = true; // 是否使用本地会话状态
 
-    protected long timeBetweenLogStatsMillis;
+    protected long timeBetweenLogStatsMillis; // 打印线程池配置信息时间间隔
     protected DruidDataSourceStatLogger statLogger = new DruidDataSourceStatLoggerImpl();
 
-    protected boolean asyncCloseConnectionEnable;
-    protected int maxCreateTaskCount = 3;
-    protected boolean failFast;
-    protected volatile int failContinuous;
-    protected volatile long failContinuousTimeMillis;
+    protected boolean asyncCloseConnectionEnable; // 是否异步关闭连接
+    protected int maxCreateTaskCount = 3; // 最大创建任务数
+    protected boolean failFast; // 是否快速失败
+    protected volatile int failContinuous; // 是否连续失败标识
+    protected volatile long failContinuousTimeMillis; // 连续失败时间
     protected ScheduledExecutorService destroyScheduler; // 销毁连接定时任务线程池
     protected ScheduledExecutorService createScheduler; // 创建连接定时任务线程池
-    protected Executor netTimeoutExecutor;
-    protected volatile boolean netTimeoutError;
+    protected Executor netTimeoutExecutor; // 网络超时线程池
+    protected volatile boolean netTimeoutError; // 是否网络超时错误
 
+    // 连续失败时间，失败为当前时间，成功为0
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> failContinuousTimeMillisUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "failContinuousTimeMillis");
+    // 连续失败标志，失败为1，成功为0
     static final AtomicIntegerFieldUpdater<DruidAbstractDataSource> failContinuousUpdater = AtomicIntegerFieldUpdater.newUpdater(DruidAbstractDataSource.class, "failContinuous");
 
-    protected boolean initVariants;
-    protected boolean initGlobalVariants;
+    protected boolean initVariants; // 使用初始化变量
+    protected boolean initGlobalVariants; // 是否初始化全局变量
     protected volatile boolean onFatalError; // 是否致命错误
-    protected volatile int onFatalErrorMaxActive;
+    protected volatile int onFatalErrorMaxActive; // todo:致命错误的最大活跃数？
     protected volatile int fatalErrorCount; // 致命错误计数
     protected volatile int fatalErrorCountLastShrink; // 致命错误计数最后一次收缩
     protected volatile long lastFatalErrorTimeMillis; // 最近一次发生错误的时间
-    protected volatile String lastFatalErrorSql;
-    protected volatile Throwable lastFatalError;
+    protected volatile String lastFatalErrorSql; // 最近一次致命错误的sql
+    protected volatile Throwable lastFatalError; // 最近一次致命错误
     protected volatile Throwable keepAliveError;
 
     public DruidAbstractDataSource(boolean lockFair) {
@@ -425,6 +444,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         this.transactionQueryTimeout = transactionQueryTimeout;
     }
 
+    // 执行数(总共)
     public long getExecuteCount() {
         return executeCount + executeQueryCount + executeUpdateCount + executeBatchCount;
     }
@@ -508,6 +528,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         return cachedPreparedStatementMissCount;
     }
 
+    // PSCache访问次数
     public long getCachedPreparedStatementAccessCount() {
         return cachedPreparedStatementMissCount + cachedPreparedStatementHitCount;
     }
@@ -1418,6 +1439,11 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         this.filters.clear();
     }
 
+    /**
+     * 使用validConnectionChecker或Statement验证连接是否正常
+     * @param conn
+     * @throws SQLException
+     */
     public void validateConnection(Connection conn) throws SQLException {
         String query = getValidationQuery();
         if (conn.isClosed()) {
@@ -1642,12 +1668,14 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         this.clearFiltersEnable = clearFiltersEnable;
     }
 
+    /**
+     * 连接、执行、结果、事务、元数据对应的连接id，以及变更其id的线程安全类
+     */
     protected volatile long connectionIdSeed = 10000L;
     protected volatile long statementIdSeed = 20000L;
     protected volatile long resultSetIdSeed = 50000L;
     protected volatile long transactionIdSeed = 60000L;
     protected volatile long metaDataIdSeed = 80000L;
-
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> connectionIdSeedUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "connectionIdSeed");
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> statementIdSeedUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "statementIdSeed");
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> resultSetIdSeedUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "resultSetIdSeed");
@@ -1697,6 +1725,13 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
 
     protected abstract void recycle(DruidPooledConnection pooledConnection) throws SQLException;
 
+    /**
+     * 创建物理连接，更新连接创建数量
+     * @param url
+     * @param info
+     * @return
+     * @throws SQLException
+     */
     public Connection createPhysicalConnection(String url, Properties info) throws SQLException {
         Connection conn;
         if (getProxyFilters().isEmpty()) {
@@ -1712,6 +1747,18 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         return conn;
     }
 
+    /**
+     * 创建物理连接
+     *    1、创建物理连接
+     *    2、初始化物理连接
+     *      （1）设置事务是否自动提交、是否只读、事务隔离级别、日志目录、执行初始化sql、参数Map集合、全局参数Map集合
+     *    3、使用validConnectionChecker或Statement验证连接是否正常
+     *    4、更新物理连接创建时间和创建数量统计，重置连续失败标志和创建失败信息
+     *    5、将物理连接封装为 PhysicalConnectionInfo，其包括了：物理连接、连接开始时间、连接初始化时间、连接验证时间、参数Map集合、全局参数Map集合
+     *
+     * @return
+     * @throws SQLException
+     */
     public PhysicalConnectionInfo createPhysicalConnection() throws SQLException {
         String url = this.getUrl();
         Properties connectProperties = getConnectProperties();
@@ -1820,6 +1867,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
                 }
             }
 
+            // 使用validConnectionChecker或Statement验证连接是否正常
             validateConnection(conn);
             validatedNanos = System.nanoTime();
 
@@ -1847,6 +1895,12 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         return new PhysicalConnectionInfo(conn, connectStartNanos, connectedNanos, initedNanos, validatedNanos, variables, globalVariables);
     }
 
+    /**
+     * 更新创建错误信息
+     *      更新创建错误内容，如果没有错误，可以清空错误信息
+     *      如果有错误，需要更新创建异常、最近一次创建异常、以及最近一次创建异常的时间
+     * @param ex
+     */
     protected void setCreateError(Throwable ex) {
         if (ex == null) {
             lock.lock();
@@ -1876,7 +1930,12 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         return failContinuousUpdater.get(this) == 1;
     }
 
+    /**
+     * 更新连续失败的状态和时间
+     * @param fail
+     */
     protected void setFailContinuous(boolean fail) {
+        // 更新连续失败的时间
         if (fail) {
             failContinuousTimeMillisUpdater.set(this, System.currentTimeMillis());
         } else {
@@ -1887,7 +1946,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         if (currentState == fail) {
             return;
         }
-
+        // 更新连续失败标志
         if (fail) {
             failContinuousUpdater.set(this, 1);
             if (LOG.isInfoEnabled()) {
@@ -1905,6 +1964,14 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         initPhysicalConnection(conn, null, null);
     }
 
+    /**
+     * 初始化物理连接
+     *      （1）设置事务是否自动提交、是否只读、事务隔离级别、日志目录、执行初始化sql、参数Map集合、全局参数Map集合
+     * @param conn
+     * @param variables
+     * @param globalVariables
+     * @throws SQLException
+     */
     public void initPhysicalConnection(Connection conn,
                                        Map<String, Object> variables,
                                        Map<String, Object> globalVariables) throws SQLException {

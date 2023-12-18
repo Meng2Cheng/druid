@@ -42,7 +42,7 @@ public class ConnectionProxyImpl extends WrapperProxyImpl implements ConnectionP
 
     private FilterChainImpl filterChain;
 
-    private long lastValidateTimeMillis;
+    private long lastValidateTimeMillis; // 最近验证时间
 
     public ConnectionProxyImpl(DataSourceProxy dataSource, Connection connection, Properties properties, long id) {
         super(connection, id);
