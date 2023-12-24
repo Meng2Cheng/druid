@@ -86,16 +86,16 @@ public class DruidDataSource extends DruidAbstractDataSource
     private static final long serialVersionUID = 1L;
     // stats 用于监控的统计数据
     private volatile long recycleErrorCount; // 逻辑连接回收重用次数
-    private volatile long discardErrorCount;
-    private volatile Throwable discardErrorLast;
+    private volatile long discardErrorCount; // 回收异常次数
+    private volatile Throwable discardErrorLast; // 回收异常
     private long connectCount; // 逻辑连接打开次数
     private long closeCount; // 逻辑连接关闭次数
-    private volatile long connectErrorCount; // 异常连接数
-    private long recycleCount;
+    private volatile long connectErrorCount; // 逻辑连接错误次数
+    private long recycleCount; // 回收连接数
     private long removeAbandonedCount; // 移除的疑似泄露连接数
-    private long notEmptyWaitCount; // 累计总次数
-    private long notEmptySignalCount; // 通知连接可用次数
-    private long notEmptyWaitNanos; // 等待总时长
+    private long notEmptyWaitCount; // 累计使用等待方式创建连接总次数
+    private long notEmptySignalCount; // 通知获取连接可用次数
+    private long notEmptyWaitNanos; // 累计使用等待方式创建连接总时长
     private int keepAliveCheckCount; // KeepAlive检测次数
     private int activePeak; // 活跃连接数峰值
     private long activePeakTime; // 活跃连接数峰值时间
@@ -103,20 +103,20 @@ public class DruidDataSource extends DruidAbstractDataSource
     private long poolingPeakTime; // 池中连接数峰值时间
     private volatile int keepAliveCheckErrorCount; //
     private volatile Throwable keepAliveCheckErrorLast;
-    // store
+    // store 用于存储相关内容
     private volatile DruidConnectionHolder[] connections; // 连接池数组，存储当前连接池中所有的连接
     private int poolingCount; // 池中连接数
     private int activeCount; // 活跃连接数
-    private volatile long discardCount; // 校验失败废弃连接数
+    private volatile long discardCount; // 校验失败丢弃连接数
     private int notEmptyWaitThreadCount; // 等待使用连接的线程数
     private int notEmptyWaitThreadPeak; // 等待创建连接的峰值
-    //
+    // 连接数组：可用连接数组、待清理连接数组、保活连接数组、连接标记数组、临时buffer数组
     private DruidConnectionHolder[] evictConnections; // 待清理数组，存储了需要回收的连接，用于线程回收
     private DruidConnectionHolder[] keepAliveConnections; // 待探活的连接数组，存储了需要发送验证sql保活的连接，用于守护线程定时保持连接
     private boolean[] connectionsFlag; // 连接标志数组，如果下标内容为true，说明是要探活或移除的连接，需要从连接池中移除
     private volatile DruidConnectionHolder[] shrinkBuffer; // 可用连接临时复制数组
 
-    // threads
+    // threads 创建、销毁、日志打印等线程
     private volatile ScheduledFuture<?> destroySchedulerFuture; //
     private DestroyTask destroyTask; // 连接销毁线程
 
@@ -146,13 +146,13 @@ public class DruidDataSource extends DruidAbstractDataSource
     protected JdbcDataSourceStat dataSourceStat; // 数据源监控
 
     private boolean useGlobalDataSourceStat; // 是否使用全局数据源
-    private boolean mbeanRegistered;
+    private boolean mbeanRegistered; // mbean注册标记
     public static ThreadLocal<Long> waitNanosLocal = new ThreadLocal<Long>();
     private boolean logDifferentThread = true;
     private volatile boolean keepAlive; // 是否要保持心跳
     private boolean asyncInit; // 异步创建连接标志
     protected boolean killWhenSocketReadTimeout;
-    protected boolean checkExecuteTime;
+    protected boolean checkExecuteTime; // 是否验证sql执行时间
 
     private static List<Filter> autoFilters; // 自动装载（SPI）的过滤器集合
     private boolean loadSpifilterSkip;
@@ -168,6 +168,7 @@ public class DruidDataSource extends DruidAbstractDataSource
     // 创建连接的任务id，防止并发
     protected static final AtomicLongFieldUpdater<DruidDataSource> createTaskIdSeedUpdater
             = AtomicLongFieldUpdater.newUpdater(DruidDataSource.class, "createTaskIdSeed");
+    // 回收异常次数
     protected static final AtomicLongFieldUpdater<DruidDataSource> discardErrorCountUpdater
             = AtomicLongFieldUpdater.newUpdater(DruidDataSource.class, "discardErrorCount");
     protected static final AtomicIntegerFieldUpdater<DruidDataSource> keepAliveCheckErrorCountUpdater
@@ -1569,6 +1570,14 @@ public class DruidDataSource extends DruidAbstractDataSource
         return getConnection(maxWait);
     }
 
+    /**
+     * 1、初始化连接池
+     * 2、从连接池中获取连接
+     *
+     * @param maxWaitMillis
+     * @return
+     * @throws SQLException
+     */
     public DruidPooledConnection getConnection(long maxWaitMillis) throws SQLException {
         // 初始化连接池
         init();
@@ -1604,6 +1613,25 @@ public class DruidDataSource extends DruidAbstractDataSource
 
     /**
      * 从连接池获取一个连接
+     *      1、使用自旋方式，获取连接
+     *      2、从连接池中获取一个连接
+     *          （1）验证连接池状态：如果连接池已经关闭或者不可用，则更新逻辑连接错误次数并抛出异常
+     *          （2）验证其他信息：
+     *              a、活跃连接数超过最大连接数，则不处理，继续下一次循环
+     *              b、等待创建连接的线程数大于设置的最大值（如果设置该值才会做判断），则更新逻辑连接错误次数，并抛出异常
+     *              c、如果存在致命错误 且 设置了当OnFatalError发生时最大使用连接数量，并且活跃连接数大于等于致命错误的最大活跃数，抛出异常
+     *          （3）逻辑连接打开次数+1
+     *          （4）从连接池中获取一个连接
+     *          （5）如果获取的连接不为空：更新活跃连接数、活跃连接峰值；如果为空，抛出异常
+     *          （6）将连接使用次数+1
+     *      3、验证连接有效性（使用validConnectionChecker或Statement验证）
+     *          （1）如果开启testOnBorrow，在本次获取连接时，验证数据库验证连接有效性，如果验证失败，需要回收连接
+     *          （2）如果没有开启testOnBorrow，先验证连接状态是否为已关闭，如果是则关闭连接
+     *          （3）如果没有开启testOnBorrow但是开启了testWhileIdle
+     *              a、连接空闲时间如果超过配置的验证时间，则验证连接（连接空闲时间即连接最近一次活跃时间距当前时间，包括了最近一次活跃时间、执行时间、心跳时间，都算是最近的活跃）
+     *              b、如果验证失败，需要回收连接
+     *      4、是否回收连接泄露，如果凯斯，则将连接放入活跃连接Map，更新连接的堆栈、连接成功时间、是否处理堆栈
+     *      5、设置数据源事务是否自动提交
      * @param maxWaitMillis
      * @return
      * @throws SQLException
@@ -1631,7 +1659,7 @@ public class DruidDataSource extends DruidAbstractDataSource
             }
 
             // 如果开启testOnBorrow，则验证连接是否有效
-            // 如果开启，每次获取连接时候都要到数据库验证连接有效性，这在高并发的时候会造成性能下降，可以将testOnBorrow设置成false，testWhileIdle设置成true这样能获得比较好的性能
+            // 如果开启，每次获取连接时候都要校验数据库验证连接有效性，这在高并发的时候会造成性能下降，可以将testOnBorrow设置成false，testWhileIdle设置成true这样能获得比较好的性能
             if (testOnBorrow) {
                 boolean validated = testConnectionInternal(poolableConnection.holder, poolableConnection.conn);
                 if (!validated) {
@@ -1649,11 +1677,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                     continue;
                 }
 
-                // 此时判断连接空闲的依据是空闲时间大于timeBetweenEvictionRunsMillis（默认1分钟），并不是使用minEvictableIdleTimeMillis跟maxEvictableIdleTimeMillis，
-                // 也就是说如果连接空闲时间超过一分钟就测试一下连接的有效性，但并不是直接剔除；而如果空闲时间超过了minEvictableIdleTimeMillis则会直接剔除
-                // TODO:此处描述应该更清晰一点
-                // 连接空闲时间大于timeBetweenEvictionRunsMillis指定的毫秒，就会执行参数validationQuery指定的SQL来检测连接是否有效。这个参数会定期执行。
-                // 检测是否空闲
+                // 连接空闲时间如果超过配置的验证时间，则验证连接（连接空闲时间即连接最近一次活跃时间距当前时间，包括了最近一次活跃时间、执行时间、心跳时间，都算是最近的活跃）
                 if (testWhileIdle) {
                     final DruidConnectionHolder holder = poolableConnection.holder;
                     long currentTimeMillis = System.currentTimeMillis();
@@ -1695,7 +1719,7 @@ public class DruidDataSource extends DruidAbstractDataSource
             }
 
             // 是否回收连接泄露
-            // 如果有线程从Druid中获取到了连接并没有及时归还，那么Druid就会定期检测该连接是否会处于运行状态，如果不处于运行状态，则被获取时间超过removeAbandonedTimeoutMillis就会强制回收该连接。
+            //  将连接放入活跃连接Map，更新连接的堆栈、连接成功时间、是否处理堆栈
             if (removeAbandoned) {
                 StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
                 poolableConnection.connectStackTrace = stackTrace;
@@ -1758,6 +1782,10 @@ public class DruidDataSource extends DruidAbstractDataSource
         }
     }
 
+    /**
+     * 丢弃连接
+     * @param holder
+     */
     public void discardConnection(DruidConnectionHolder holder) {
         if (holder == null) {
             return;
@@ -1796,7 +1824,16 @@ public class DruidDataSource extends DruidAbstractDataSource
     }
 
     /**
-     * 获取内部连接
+     * 从连接池中获取连接
+     *      1、验证连接池状态：如果连接池已经关闭或者不可用，则更新逻辑连接错误次数并抛出异常
+     *      2、验证其他信息：
+     *          （1）活跃连接数超过最大连接数，则更新连接创建中统计、直接创建连接数统计、最后活跃时间、活跃峰值相关信息，同时关闭该连接
+     *          （2）等待创建连接的线程数大于设置的最大值（如果设置该值才会做判断），则更新逻辑连接错误次数，并抛出异常
+     *          （3）如果存在致命错误 且 设置了当OnFatalError发生时最大使用连接数量，并且活跃连接数大于等于致命错误的最大活跃数，抛出异常
+     *      3、逻辑连接打开次数+1
+     *      4、从连接池中获取一个连接
+     *      5、如果获取的连接不为空：更新活跃连接数、活跃连接峰值；如果为空，抛出异常
+     *      6、将连接使用次数+1，并将其封装为DruidPooledConnection返回
      * @param maxWait
      * @return
      * @throws SQLException
@@ -1886,7 +1923,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                             + lock.getQueueLength());
                 }
 
-                // 如果存在致命错误 且 致命错误的最大活跃数大于0 且 活跃线程数大于等于致命错误的最大活跃数，抛出异常
+                // 如果存在致命错误 且 设置了当OnFatalError发生时最大使用连接数量，并且活跃连接数大于等于致命错误的最大活跃数，抛出异常
                 if (onFatalError
                         && onFatalErrorMaxActive > 0
                         && activeCount >= onFatalErrorMaxActive) {
@@ -2031,6 +2068,13 @@ public class DruidDataSource extends DruidAbstractDataSource
         return poolalbeConnection;
     }
 
+    /**
+     * 异常处理
+     * @param pooledConnection
+     * @param t
+     * @param sql
+     * @throws SQLException
+     */
     public void handleConnectionException(
             DruidPooledConnection pooledConnection,
             Throwable t,
@@ -2041,6 +2085,7 @@ public class DruidDataSource extends DruidAbstractDataSource
             return;
         }
 
+        // 更新错误数、最近一次错误信息、最近一次错误时间
         errorCountUpdater.incrementAndGet(this);
         lastError = t;
         lastErrorTimeMillis = System.currentTimeMillis();
@@ -2049,12 +2094,14 @@ public class DruidDataSource extends DruidAbstractDataSource
             SQLException sqlEx = (SQLException) t;
 
             // broadcastConnectionError
+            // 组装连接异常事件，通知连接事件监听器
             ConnectionEvent event = new ConnectionEvent(pooledConnection, sqlEx);
             for (ConnectionEventListener eventListener : holder.getConnectionEventListeners()) {
                 eventListener.connectionErrorOccurred(event);
             }
 
             // exceptionSorter.isExceptionFatal
+            // 如果是致命错误，需要做对应处理
             if (exceptionSorter != null && exceptionSorter.isExceptionFatal(sqlEx)) {
                 handleFatalError(pooledConnection, sqlEx, sql);
             }
@@ -2065,6 +2112,13 @@ public class DruidDataSource extends DruidAbstractDataSource
         }
     }
 
+    /**
+     * 致命错误处理
+     * @param conn
+     * @param error
+     * @param sql
+     * @throws SQLException
+     */
     protected final void handleFatalError(
             DruidPooledConnection conn,
             SQLException error,
@@ -2072,6 +2126,7 @@ public class DruidDataSource extends DruidAbstractDataSource
     ) throws SQLException {
         final DruidConnectionHolder holder = conn.holder;
 
+        // 如果该连接还在做使用跟踪（是否在使用），如果在跟踪，将连接移除活跃连接Map，同时设置不再跟踪
         if (conn.isTraceEnable()) {
             activeConnectionLock.lock();
             try {
@@ -2096,14 +2151,19 @@ public class DruidDataSource extends DruidAbstractDataSource
         boolean requireDiscard = false;
         final ReentrantLock lock = conn.lock;
         lock.lock();
+
         try {
+            // 如果连接现在还未关闭且可用，则清理Statement缓存、关闭跟踪、清空持有的DruidConnectionHolder和事务信息、设置连接池可用标识、导致连接池不可用的错误信息
             if ((!conn.closed) && !conn.disable) {
                 conn.disable(error);
                 requireDiscard = true;
             }
 
+            // 更新最近致命错误时间、致命错误数、最近致命错误信息、最近致命错误时间
             lastFatalErrorTimeMillis = lastErrorTimeMillis;
             fatalErrorCount++;
+            // 如果上次回收之后发生的致命错误数大于onFatalErrorMaxActive，则也将致命错误标志置位true
+            // 这里主要指当OnFatalError发生时最大使用连接数量，用于控制异常发生时并发执行SQL的数量，减轻数据库恢复的压力
             if (fatalErrorCount - fatalErrorCountLastShrink > onFatalErrorMaxActive) {
                 onFatalError = true;
             }
@@ -2113,6 +2173,7 @@ public class DruidDataSource extends DruidAbstractDataSource
             lock.unlock();
         }
 
+        // 通知生产者创建连接
         if (onFatalError && holder != null && holder.getDataSource() != null) {
             ReentrantLock dataSourceLock = holder.getDataSource().lock;
             dataSourceLock.lock();
@@ -2123,6 +2184,7 @@ public class DruidDataSource extends DruidAbstractDataSource
             }
         }
 
+        // 如果连接需要丢弃，则关闭连接并更新相关统计信息
         if (requireDiscard) {
             if (holder.statementTrace != null) {
                 holder.lock.lock();
@@ -2144,6 +2206,20 @@ public class DruidDataSource extends DruidAbstractDataSource
 
     /**
      * 回收连接
+     *      1、验证：验证获取连接的线程是否和回收连接的线程是同一个
+     *      2、将连接从活跃连接Map中移除，并充值堆栈内容
+     *      3、如果不是自动提交且不是只读，则回滚事务
+     *      4、重置线程各类统计数据（如果获取连接和关闭连接是同一个线程，不加锁处理，否则需要加锁处理）
+     *      5、以下情况不需要将连接放回连接池：
+     *          （1）设置的有链接最大使用次数，且当前连接使用次数已经超过该限制，则丢弃该物理连接
+     *          （2）如果连接已经关闭：更新连接池活跃连接数量、关闭连接数量、代理连接活跃状态
+     *          （3）验证连接有效性，如果无效，则关闭连接，同时更新相关统计数据
+     *          （4）如果连接状态已经是不可用，需要丢弃连接
+     *          （5）如果连接最近一次使用事件超过了物理连接超时时间（如果设置了物理连接的超时时间），也需要丢弃该物理连接
+     *      6、将连接放入连接池
+     *          （1）更新活跃连接数、逻辑连接关闭次数、回收连接数
+     *          （2）将连接放入连接池，更新最近活跃时间、连接数峰值、通知获取连接可用次数，同时通知消费者可以获取连接
+     *
      */
     protected void recycle(DruidPooledConnection pooledConnection) throws SQLException {
         final DruidConnectionHolder holder = pooledConnection.holder;
@@ -2440,6 +2516,12 @@ public class DruidDataSource extends DruidAbstractDataSource
         return mbeanRegistered;
     }
 
+    /**
+     * 将连接放入连接池，更新最近活跃时间、连接数峰值、通知获取连接可用次数，同时通知消费者可以获取连接
+     * @param e
+     * @param lastActiveTimeMillis
+     * @return
+     */
     boolean putLast(DruidConnectionHolder e, long lastActiveTimeMillis) {
         if (poolingCount >= maxActive || e.discard || this.closed || this.closing) {
             return false;
@@ -2460,6 +2542,22 @@ public class DruidDataSource extends DruidAbstractDataSource
         return true;
     }
 
+
+    /**
+     * 不阻塞获取连接
+     *      1、如果没有可用连接（当前可用连接为0）
+     *          （1）通知生产者生产连接
+     *          （2）更新等待使用连接的线程数、等待使用连接的线程数峰值
+     *          （3）阻塞等待可以获取连接（不带超时时间）
+     *          （4）被唤醒后等待使用连接的线程数-1、累计使用等待方式创建连接总次数+1
+     *          （5）如果连接不可用，更新逻辑连接错误次数，并抛出异常
+     *          （6）如果上述处理异常，通知应用线程继续获取连接，并更新通知获取连接可用次数
+     *      2、如果有可用连接
+     *          （1）池中连接数-1、从连接池的最后获取一个连接，并把池中该连接置位null
+     * @return
+     * @throws InterruptedException
+     * @throws SQLException
+     */
     DruidConnectionHolder takeLast() throws InterruptedException, SQLException {
         try {
             while (poolingCount == 0) {
@@ -2502,13 +2600,31 @@ public class DruidDataSource extends DruidAbstractDataSource
         return last;
     }
 
+    /**
+     * 获取连接
+     *      1、使用自旋的方式获取连接
+     *      2、如果没有可用连接
+     *          （1）通知生产者创建连接
+     *          （2）更新等待使用连接的线程数、等待使用连接数峰值
+     *          （3）阻塞等待可以获取连接（有超时时间），如果在时间范围内没有被通知放行，则抛出异常，否则继续以下逻辑
+     *          （4）更新累计使用等待方式创建连接总次数、累计使用等待方式创建连接总时长
+     *          （5）如果连接池不可用，则更新逻辑连接错误次数并抛出异常
+     *          （6）如果以上处理异常，通知应用线程继续获取连接，同时更新通知获取连接可用次数
+     *      3、如果有可用连接
+     *          （1）将 等待使用连接的线程数-1
+     *          （2）从连接池的最后获取一个连接，并将可用连接数-1，更新上一次获取连接的等待时长
+     * @param nanos
+     * @return
+     * @throws InterruptedException
+     * @throws SQLException
+     */
     private DruidConnectionHolder pollLast(long nanos) throws InterruptedException, SQLException {
         long estimate = nanos;
 
         // 使用自旋的方式获取连接
         for (; ; ) {
             if (poolingCount == 0) {
-                // 如果没有连接可用，则阻塞等待创建连接
+                // 通知生产者创建连接
                 emptySignal(); // send signal to CreateThread create connection
 
                 if (failFast && isFailContinuous()) {
@@ -2528,10 +2644,11 @@ public class DruidDataSource extends DruidAbstractDataSource
 
                 try {
                     long startEstimate = estimate;
+                    // 阻塞等待可以获取连接
                     estimate = notEmpty.awaitNanos(estimate); // signal by
                     // recycle or
                     // creator
-                    // 等待创建连接数 +1
+                    // 累计使用等待方式创建连接总次数 +1
                     notEmptyWaitCount++;
                     notEmptyWaitNanos += (startEstimate - estimate);
 
@@ -2822,7 +2939,7 @@ public class DruidDataSource extends DruidAbstractDataSource
      *            b、连接已经达到上限（连接数大于等于最大连接数）
      *            c、连接已经存在
      *      （2）将连接放入可用连接数组connections，并更新连接数、连接数峰值和达到峰值的时间
-     *      （3）唤醒一个等待获取连接的线程，更新更新连接使用次数
+     *      （3）唤醒一个等待获取连接的线程，更新连接使用次数
      *
      * @param holder
      * @param createTaskId
@@ -3092,11 +3209,7 @@ public class DruidDataSource extends DruidAbstractDataSource
      *              b、不需要keepAlive 或者 当前连接池中活跃连接和可用连接总和已经超过了最小连接数
      *              c、不是连续失败
      *          （4）活跃连接数+可用连接数已经超过了最大连接数
-     *      2、创建物理连接
-     *          （1）创建物理连接
-     *          （2）更新物理连接创建时间、创建个数
-     *          （3）重置是否连续失败标志、失败信息、
-     *      3、创建连接
+     *      2、创建连接
      *          （1）创建物理连接
      *              a、创建物理连接
      *              b、初始化物理连接：设置事务是否自动提交、是否只读、事务隔离级别、日志目录、执行初始化sql、参数Map集合、全局参数Map集合
@@ -3105,14 +3218,14 @@ public class DruidDataSource extends DruidAbstractDataSource
      *              e、将物理连接封装为 PhysicalConnectionInfo，其包括了：物理连接、连接开始时间、连接初始化时间、连接验证时间、参数Map集合、全局参数Map集合
      *          （2）将物理连接封装为DruidConnectionHolder
      *              a、设置数据源、物理连接、创建时间、参数Map、全局参数Map、连接时间、上次活跃时间、上次执行时间、底层自动提交、连接ID、底层长链接能力、默认事务隔离级别、默认事务自动提交、默认事务隔离级别、默认只读标识
-     *      4、将连接放入连接池（全程加锁）
+     *      3、将连接放入连接池（全程加锁）
      *          （1）如果不满足条件，则不处理
      *              a、连接池的状态不正确
      *              b、连接已经达到上限（连接数大于等于最大连接数）
      *              c、连接已经存在
      *          （2）将连接放入可用连接数组connections，并更新连接数、连接数峰值和达到峰值的时间
      *          （3）唤醒一个等待获取连接的线程，更新更新连接使用次数
-     *      5、如果创建连接失败，则更新上一次创建错误内容和上一次创建失败时间
+     *      4、如果创建连接失败，则更新上一次创建错误内容和上一次创建失败时间
      *
      */
     public class CreateConnectionThread extends Thread {
@@ -3141,12 +3254,15 @@ public class DruidDataSource extends DruidAbstractDataSource
                 try {
                     boolean emptyWait = true;
 
+                    // 如果有连接池存在创建连接错误信息、但是池中连接数为0、并且本次没有新增的丢弃连接，以上三者都满足，不需要等待；
+                    // 这一条主要说的是这个是之前有需要创建连接的需求，但是创建失败了，因此需要重新创建，因此不需要等待
                     if (createError != null
                             && poolingCount == 0
                             && !discardChanged) {
                         emptyWait = false;
                     }
 
+                    // 异步初始化且创建的连接数小于初始化连接数，不需要等待；这一条主要说的是要保证创建的连接数要达到设置的最小连接数
                     if (emptyWait
                             && asyncInit && createCount < initialSize) {
                         emptyWait = false;
@@ -3154,9 +3270,11 @@ public class DruidDataSource extends DruidAbstractDataSource
 
                     if (emptyWait) {
                         // 以下条件都满足，说明当前不能创建连接，需要等待
-                        if (poolingCount >= notEmptyWaitThreadCount // 可用线程数超过了等待使用线程数
-                                && (!(keepAlive && activeCount + poolingCount < minIdle)) // 不需要keepAlive 或者 当前连接池中活跃连接和可用连接总和已经超过了最小连接数
-                                && !isFailContinuous() // 不是连续失败
+                        if (poolingCount >= notEmptyWaitThreadCount // 连接数已经超过了等待使用连接的数量；这一条主要表达的是当前已有连接已经超过需要的连接
+                                // 不需要keepAlive 或者 当前连接池中活跃连接和可用连接总和已经超过了最小连接数；这一条表达的是已有连接已经超过了最小连接
+                                // 因为Druid限制只有keepAlive为true时，才保证连接池中的连接数 >= minIdle，因此带有keepAlive的判断
+                                && (!(keepAlive && activeCount + poolingCount < minIdle))
+                                && !isFailContinuous() // 不是连续失败；这一条表达的是本次创建连接不是本次失败的重试，而是一个全新的任务
                         ) {
                             empty.await();
                         }
@@ -3183,6 +3301,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                 PhysicalConnectionInfo connection = null;
 
                 try {
+                    // 创建物理连接
                     connection = createPhysicalConnection();
                 } catch (SQLException e) {
                     LOG.error("create connection SQLException, url: " + jdbcUrl + ", errorCode " + e.getErrorCode()
@@ -3282,6 +3401,8 @@ public class DruidDataSource extends DruidAbstractDataSource
 
     /**
      * 连接回收线程
+     *      1、回收线程
+     *      2、检测连接泄露
      */
     public class DestroyTask implements Runnable {
         public DestroyTask() {
@@ -3328,8 +3449,10 @@ public class DruidDataSource extends DruidAbstractDataSource
 
     /**
      * 移除疑似泄露连接
-     *      检查所有活跃的连接，如果时间超过了设置移除超时时间，则直接从活跃连接集合中移除
-     *      然后关闭所有要移除的连接，同时更新相关统计数据
+     *     1、循环所有的连接，判断是否疑似泄露（加锁）
+     *          （1）检查所有活跃的连接，如果连接时间距当前时间超过了设置移除超时时间，则直接从活跃连接集合中移除、设置不跟踪连接的堆栈、并将该连接添加到待移除集合中
+     *     2、关闭所有要移除的连接
+     *          （1）设置连接移除状态、更新移除连接数、打印丢弃连接日志
      * @return
      */
     public int removeAbandoned() {
@@ -3475,13 +3598,37 @@ public class DruidDataSource extends DruidAbstractDataSource
 
     /**
      * 回收连接
-     *      从可用连接池中第一个循环，判断是否要回收和探活
-     *          如果需要探活，则将该连接放入探活数组，然后将连接数组中该标志置位true
-     *          如果需要回收，则将该连接放入探活数组，然后将连接数组中该标志置位true
-     *      重置连接数组，将可用连接（标志为false的连接）放入shrinkBuffer中，然后将连接数组清空，再将shrinkBuffer中连接放回连接数组，再清空shrinkBuffer（其实就是在两个数组间复制数据，用来清理不要的连接，然后保证连接是连续的）
-     *      如果存在需要回收的，就直接关闭连接
-     *      如果存在需要探活的，则验证sql，如果验证成功，则放回连接池，验证失败，则直接回收
-     *      操作完毕后，需要看是否需要补充连接，如果需要补充连接，则使用empty.signal()通知生产者创建新的连接
+     *      1、判断连接池中所有连接，判断是否要回收和探活
+     *          （1）从连接池的第一个连接开始循环
+     *          （2）将需要探活的连接放入探活数组，并将连接数组中该标志置位true（为true说明要移出连接池），满足以下条件的连接需要探活
+     *              a、判断是否要探活的条件要满足如下两点：
+     *                  a1、存在错误：存在致命错误 或 上一次回收之前就存在致命错误
+     *                  a2、错误之后没有发生新的连接：最近一次致命错误时间在连接时间之后
+     *              b、开启超时验证、开启keepAlive、空闲时间超过了设置的保活间隔，三者同时满足
+     *          （3）如果需要回收，则将该连接放入回收数组，然后将连接数组中该标志置位true（为true说明要移出连接池），满足以下条件的连接需要回收
+     *              a、没有开启超时校验，直接回收指定个连接（将其回收到最小连接数个连接）
+     *              b、开启了超时校验、设置了物理超时时间、物理连接时间（当前时间与上一次连接的时间差）超过了物理超时时间
+     *              c、连接时间超过了设置的最大驱逐时间（这里不限制回收多少个，超了就直接回收，这是为了长时间使用导致的一些异常）
+     *              d、连接时间在设置的最大最小驱逐时间之间（这里只回收指定个连接，即回收到最小连接数个连接）
+     *      2、如果存在需要保活和回收的连接，则将连接数组connections中的这些连接先移除
+     *          （1）使用一个shrinkBuffer作为临时存储，根据连接池标志将可用连接从连接池复制到shrinkBuffer，然后将连接池清空，最后再将shrinkBuffer中的连接放入连接池，从而保证连接池中连接是连续的
+     *          （2）调整连接池中连接数、KeepAlive检测次数
+     *      3、如果存在需要回收的，就直接关闭连接，同时更新物理关闭数
+     *      4、如果存在需要探活的，则需要探活
+     *          （1）更新探活连接次数
+     *          （2）则验证sql
+     *          （3）如果验证成功，则放回连接池（全程加锁）
+     *              a、如果不满足条件，则不处理
+     *                  a1、连接池的状态不正确
+     *                  a2、连接已经达到上限（连接数大于等于最大连接数）
+     *                  a3、连接已经存在
+     *              b、将连接放入可用连接数组connections，并更新连接数、连接数峰值和达到峰值的时间
+     *              c、唤醒一个等待获取连接的线程，更新更新连接使用次数
+     *          （4）验证不通过或验证失败，则直接回收（关闭连接和socket）；同时如果验证失败的话，需要更新回收异常信息、回收异常次数
+     *          （5）如果回收的太多（连接数量已经小于等于最小连接数）（这是因为存在强制回收的连接），则通知生产连接线程创建新的连接
+     *      5、操作完毕后，需要看是否需要补充连接
+     *          如果当前连接池中需要填充连接（活跃线程数、空闲连接数、在创建的连接数之和小于最小连接数），则使用empty.signal()通知生产者创建新的连接
+     *
      * @param checkTime
      * @param keepAlive
      */
@@ -3496,7 +3643,7 @@ public class DruidDataSource extends DruidAbstractDataSource
         boolean needFill = false;
         int evictCount = 0;
         int keepAliveCount = 0;
-        int fatalErrorIncrement = fatalErrorCount - fatalErrorCountLastShrink;
+        int fatalErrorIncrement = fatalErrorCount - fatalErrorCountLastShrink; // 上一次回收连接之前的致命错误数
         fatalErrorCountLastShrink = fatalErrorCount;
 
         try {
@@ -3504,12 +3651,12 @@ public class DruidDataSource extends DruidAbstractDataSource
                 return;
             }
 
-            final int checkCount = poolingCount - minIdle;
+            final int checkCount = poolingCount - minIdle; // 回收连接个数
             final long currentTimeMillis = System.currentTimeMillis();
             Arrays.fill(connectionsFlag, 0, poolingCount, false);
             for (int i = 0; i < poolingCount; ++i) {
                 DruidConnectionHolder connection = connections[i];
-                // 如果存在致命错误且最近一次致命错误发生时间大于最近一次连接事件，则将连接放入保活数组keepAliveConnections
+                // 如果存在致命错误且最近一次致命错误且最近一次错误发生时间在连接时间之后，则将连接放入保活数组keepAliveConnections；这一条说的是发生了致命错误，可能库挂了，那么之前可用的链接可能现在就不可用了，需要探活
                 if ((onFatalError || fatalErrorIncrement > 0) && (lastFatalErrorTimeMillis > connection.connectTimeMillis)) {
                     keepAliveConnections[keepAliveCount++] = connection;
                     connectionsFlag[i] = true;
@@ -3549,6 +3696,7 @@ public class DruidDataSource extends DruidAbstractDataSource
                         }
                     }
                     // 如果需要保活，且连接空闲时间超过了设置的保活间隔，则将其放入保活数组keepAliveConnections
+                    // 这一条说的是设置了探活标识和探活时间周期的情况下，如果空闲时间超过了设置的保活时间，就需要探活
                     if (keepAlive && idleMillis >= keepAliveBetweenTimeMillis) {
                         keepAliveConnections[keepAliveCount++] = connection;
                         connectionsFlag[i] = true;
@@ -4316,6 +4464,9 @@ public class DruidDataSource extends DruidAbstractDataSource
         }
     }
 
+    /**
+     * 通知生产者创建连接
+     */
     private void emptySignal() {
         // 创建连接的线程池为空，则通知等待在empty上的线程
         if (createScheduler == null) {

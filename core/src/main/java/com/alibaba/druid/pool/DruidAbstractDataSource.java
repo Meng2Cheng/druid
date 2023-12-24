@@ -141,7 +141,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     protected volatile int maxWaitThreadCount = -1; // 最大等待线程数
     protected volatile boolean accessToUnderlyingConnectionAllowed = true; // 是否允许访问底层连接
 
-    protected volatile long timeBetweenEvictionRunsMillis = DEFAULT_TIME_BETWEEN_EVICTION_RUNS_MILLIS; // 检查空闲连接的频率，默认值为1分钟
+    protected volatile long timeBetweenEvictionRunsMillis = DEFAULT_TIME_BETWEEN_EVICTION_RUNS_MILLIS; // 检查空闲连接的频率，默认值为1分钟，超过该值需要验证连接是否有效
     protected volatile int numTestsPerEvictionRun = DEFAULT_NUM_TESTS_PER_EVICTION_RUN; // 每次驱逐运行的测试数 todo
     protected volatile long minEvictableIdleTimeMillis = DEFAULT_MIN_EVICTABLE_IDLE_TIME_MILLIS; // 最小可驱逐空闲时间毫秒
     protected volatile long maxEvictableIdleTimeMillis = DEFAULT_MAX_EVICTABLE_IDLE_TIME_MILLIS; // 最大可驱逐空闲时间毫秒
@@ -247,27 +247,27 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     protected boolean useOracleImplicitCache = true;
 
     protected ReentrantLock lock; // 可重入锁，用户可创建、可回收的加锁处理
-    protected Condition notEmpty; // 连接池没有可用连接时，应用线程会在notEmpty上等待，
-    protected Condition empty; // 连接池已满时，生产连接的线程会在empty上等待
+    protected Condition notEmpty; // 应用线程会在notEmpty上等待，
+    protected Condition empty; // 生产连接的线程会在empty上等待
 
     protected ReentrantLock activeConnectionLock = new ReentrantLock(); // 活跃连接锁
 
-    protected volatile int createErrorCount; // 物理连接错误次数
-    protected volatile int creatingCount;  // 创建物理连接数量统计
-    protected volatile int directCreateCount; // 直接创建数量
-    protected volatile long createCount; // 物理连接打开次数
-    protected volatile long destroyCount;  // 物理关闭数量
+    protected volatile int createErrorCount; // 连接创建错误统计
+    protected volatile int creatingCount;  // 连接创建中统计
+    protected volatile int directCreateCount; // 连接直接创建统计
+    protected volatile long createCount; // 连接创建数统计
+    protected volatile long destroyCount;  // 连接销毁数统计
     protected volatile long createStartNanos; // 创建连接开始时间
 
-    // 物理连接错误次数
+    // 连接创建错误统计
     static final AtomicIntegerFieldUpdater<DruidAbstractDataSource> createErrorCountUpdater = AtomicIntegerFieldUpdater.newUpdater(DruidAbstractDataSource.class, "createErrorCount");
-    // 创建物理连接数量统计
+    // 连接创建中统计
     static final AtomicIntegerFieldUpdater<DruidAbstractDataSource> creatingCountUpdater = AtomicIntegerFieldUpdater.newUpdater(DruidAbstractDataSource.class, "creatingCount");
-    // 直接创建数量
+    // 连接直接创建统计
     static final AtomicIntegerFieldUpdater<DruidAbstractDataSource> directCreateCountUpdater = AtomicIntegerFieldUpdater.newUpdater(DruidAbstractDataSource.class, "directCreateCount");
-    // 物理连接打开次数
+    // 连接创建数统计
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> createCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "createCount");
-    // 物理关闭数量
+    // 连接销毁数统计
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> destroyCountUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "destroyCount"); // 线程安全的更新销毁连接数destroyCount
     // 创建连接开始时间
     static final AtomicLongFieldUpdater<DruidAbstractDataSource> createStartNanosUpdater = AtomicLongFieldUpdater.newUpdater(DruidAbstractDataSource.class, "createStartNanos");
@@ -296,7 +296,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     protected boolean initVariants; // 使用初始化变量
     protected boolean initGlobalVariants; // 是否初始化全局变量
     protected volatile boolean onFatalError; // 是否致命错误
-    protected volatile int onFatalErrorMaxActive; // todo:致命错误的最大活跃数？
+    protected volatile int onFatalErrorMaxActive; // 当OnFatalError发生时最大使用连接数量，用于控制异常发生时并发执行SQL的数量，减轻数据库恢复的压力
     protected volatile int fatalErrorCount; // 致命错误计数
     protected volatile int fatalErrorCountLastShrink; // 致命错误计数最后一次收缩
     protected volatile long lastFatalErrorTimeMillis; // 最近一次发生错误的时间
@@ -1525,6 +1525,12 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         return testConnectionInternal(null, conn);
     }
 
+    /**
+     * 验证连接有效性，使用validConnectionChecker或Statement验证
+     * @param holder
+     * @param conn
+     * @return
+     */
     protected boolean testConnectionInternal(DruidConnectionHolder holder, Connection conn) {
         String sqlFile = JdbcSqlStat.getContextSqlFile();
         String sqlName = JdbcSqlStat.getContextSqlName();
@@ -1754,7 +1760,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
      *      （1）设置事务是否自动提交、是否只读、事务隔离级别、日志目录、执行初始化sql、参数Map集合、全局参数Map集合
      *    3、使用validConnectionChecker或Statement验证连接是否正常
      *    4、更新物理连接创建时间和创建数量统计，重置连续失败标志和创建失败信息
-     *    5、将物理连接封装为 PhysicalConnectionInfo，其包括了：物理连接、连接开始时间、连接初始化时间、连接验证时间、参数Map集合、全局参数Map集合
+     *    5、将物理连接封装为 PhysicalConnectionInfo，其包括了：数据源、物理连接、创建时间、参数Map、全局参数Map、连接时间、上次活跃时间、上次执行时间、底层自动提交、连接ID、底层长链接能力、默认事务隔离级别、默认事务自动提交、默认事务隔离级别、默认只读标识等信息
      *
      * @return
      * @throws SQLException
@@ -1763,6 +1769,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         String url = this.getUrl();
         Properties connectProperties = getConnectProperties();
 
+        // jdbc相关参数回调处理：这里是考虑在配置数据库的url、用户名、密码等信息时使用了加密算法，传过来的值是加密后的值，直接创建连接是创建不了的，因此需要做回调进行处理
         String user;
         if (getUserCallback() != null) {
             user = getUserCallback().getName();
@@ -1787,6 +1794,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
             }
         }
 
+        // 设置物理连接配置属性：url、用户名、密码、loginTimeout、loginTimeout、connectTimeout等
         Properties physicalConnectProperties = new Properties();
         if (connectProperties != null) {
             physicalConnectProperties.putAll(connectProperties);
@@ -1842,16 +1850,18 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
                 ? new HashMap<String, Object>()
                 : null;
 
+        // 更新创建物理连接的时间和数量
         createStartNanosUpdater.set(this, connectStartNanos);
         creatingCountUpdater.incrementAndGet(this);
         try {
+            // 创建真实物理连接
             conn = createPhysicalConnection(url, physicalConnectProperties);
             connectedNanos = System.nanoTime();
 
             if (conn == null) {
                 throw new SQLException("connect error, url " + url + ", driverClass " + this.driverClass);
             }
-
+            // 设置事务是否自动提交、是否只读、事务隔离级别、日志目录、执行初始化sql、参数Map集合、全局参数Map集合
             initPhysicalConnection(conn, variables, globalVariables);
             initedNanos = System.nanoTime();
 

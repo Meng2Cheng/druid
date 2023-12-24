@@ -43,11 +43,11 @@ import java.util.concurrent.locks.ReentrantLock;
 public class DruidPooledConnection extends PoolableWrapper implements javax.sql.PooledConnection, Connection {
     private static final Log LOG = LogFactory.getLog(DruidPooledConnection.class);
     public static final int MAX_RECORD_SQL_COUNT = 10;
-    protected Connection conn;
-    protected volatile DruidConnectionHolder holder;
-    protected TransactionInfo transactionInfo;
+    protected Connection conn; // 物理连接
+    protected volatile DruidConnectionHolder holder; // 持有的物理连接封装类
+    protected TransactionInfo transactionInfo; // 事务信息
     private final boolean dupCloseLogEnable;
-    protected volatile boolean traceEnable; // 是否开启追踪
+    protected volatile boolean traceEnable; // 是否在做使用追踪，用以判断当前连接是都在使用
     protected volatile boolean disable; // 连接状态：是否可用
     protected volatile boolean closed; // 连接状态：是否已关闭
     static AtomicIntegerFieldUpdater CLOSING_UPDATER = AtomicIntegerFieldUpdater.newUpdater(DruidPooledConnection.class, "closing"); // 线程安全的更新 closing
@@ -57,10 +57,10 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
     private volatile boolean running; // 连接状态：是否正在运行
     private volatile boolean abandoned; // 连接状态：已经被移除（疑似连接泄露）
     protected StackTraceElement[] connectStackTrace; // 活跃连接堆栈查看
-    protected Throwable disableError;
-    final ReentrantLock lock;
-    protected volatile int closing;
-    protected FilterChain filterChain;
+    protected Throwable disableError; // 连接不可用错误堆栈信息
+    final ReentrantLock lock; // 锁
+    protected volatile int closing; // 连接关闭状态
+    protected FilterChain filterChain; // 过滤链
 
     public DruidPooledConnection(DruidConnectionHolder holder) {
         super(holder.getConnection());

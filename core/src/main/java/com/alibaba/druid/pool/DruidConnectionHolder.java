@@ -46,6 +46,9 @@ import java.util.concurrent.locks.ReentrantLock;
 public final class DruidConnectionHolder {
     private static final Log LOG = LogFactory.getLog(DruidConnectionHolder.class);
 
+    /**
+     * Oracle相关配置
+     */
     static volatile boolean ORACLE_SOCKET_FIELD_ERROR;
     static volatile Field ORACLE_FIELD_NET;
     static volatile Field ORACLE_FIELD_S_ATTS;
@@ -54,34 +57,34 @@ public final class DruidConnectionHolder {
 
     public static boolean holdabilityUnsupported;
 
-    protected final DruidAbstractDataSource dataSource;
-    protected final long connectionId;
-    protected final Connection conn;
-    protected final List<ConnectionEventListener> connectionEventListeners = new CopyOnWriteArrayList<ConnectionEventListener>();
-    protected final List<StatementEventListener> statementEventListeners = new CopyOnWriteArrayList<StatementEventListener>();
-    protected final long connectTimeMillis; // 连接时间毫秒
+    protected final DruidAbstractDataSource dataSource; // 数据源
+    protected final long connectionId; // 连接id
+    protected final Connection conn; // 物理连接
+    protected final List<ConnectionEventListener> connectionEventListeners = new CopyOnWriteArrayList<ConnectionEventListener>(); // 连接事件监听集合
+    protected final List<StatementEventListener> statementEventListeners = new CopyOnWriteArrayList<StatementEventListener>(); // statement事件监听集合
+    protected final long connectTimeMillis; // 连接时间(毫秒),只有第一次连接时会设置，后续不再会变化
     protected volatile long lastActiveTimeMillis; // 最后一次活跃时间
     protected volatile long lastExecTimeMillis; // 最后一次执行时间
     protected volatile long lastKeepTimeMillis; // 最后一次保活时间
     protected volatile long lastValidTimeMillis; // 最后一次验证时间
     protected long useCount; // 连接被使用次数
-    private long keepAliveCheckCount;
-    private long lastNotEmptyWaitNanos;
-    private final long createNanoSpan;
-    protected PreparedStatementPool statementPool;
-    protected final List<Statement> statementTrace = new ArrayList<Statement>(2);
+    private long keepAliveCheckCount; // 连接探活次数
+    private long lastNotEmptyWaitNanos; // 上一次获取连接的等待时长
+    private final long createNanoSpan; // 创建的时间区间
+    protected PreparedStatementPool statementPool; // statement缓存
+    protected final List<Statement> statementTrace = new ArrayList<Statement>(2); // statement集合
     protected final boolean defaultReadOnly; // 默认只读标识
     protected final int defaultHoldability; // 默认长链接能力
     protected final int defaultTransactionIsolation; // 默认事务隔离级别
     protected final boolean defaultAutoCommit; // 默认事务自动提交
     protected boolean underlyingReadOnly; // 磁层只读标识
-    protected int underlyingHoldability; // 底层长链接能力 todo
+    protected int underlyingHoldability; //
     protected int underlyingTransactionIsolation; // 底层事务隔离级别
     protected boolean underlyingAutoCommit; // 底层事务自动提交
     protected volatile boolean discard; // 连接状态：是否已丢弃
     protected volatile boolean active; // 连接状态：是否活跃连接
-    protected final Map<String, Object> variables;
-    protected final Map<String, Object> globalVariables;
+    protected final Map<String, Object> variables; // 局部变量
+    protected final Map<String, Object> globalVariables; // 全局变量
     final ReentrantLock lock = new ReentrantLock();
     protected String initSchema;
     protected Socket socket;
