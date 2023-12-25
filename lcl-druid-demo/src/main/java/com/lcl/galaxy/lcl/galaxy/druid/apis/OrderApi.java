@@ -33,8 +33,12 @@ public class OrderApi {
         return "OK";
     }
 
-
     @RequestMapping("/query")
+    public String query1(long orderId, long venderId){
+        return orderService.query(OrderInfoNew.builder().orderId(orderId).venderId(venderId).build()).toString();
+    }
+
+    @RequestMapping("/query1")
     @GuavaLimiter(key = "queryOrder1-1", permitsPerSecond = 50)
     public String query(long orderId, long venderId){
         return orderService.query(OrderInfoNew.builder().orderId(orderId).venderId(venderId).build()).toString();

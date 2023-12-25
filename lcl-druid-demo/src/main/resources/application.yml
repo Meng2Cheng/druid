@@ -21,13 +21,14 @@ spring:
       min-evictable-idle-time-millis: 300000 # 连接最小存活时间
       validation-query: select 1 from dual # 验证连接存活sql
       validation-query-timeout: 10000 # 验证连接存活超时时间
-      test-while-idle: false # 判断连接是否可用
+      test-while-idle: true # 判断连接是否可用
       test-on-borrow: false # 在获取连接前验证连接是否可用
       test-on-return: false # 在归还连接前验证连接是否可用
-      keep-alive: true
-      keep-alive-between-time-millis: 100000
+#      keep-alive: true
+#      keep-alive-between-time-millis: 100000
       pool-prepared-statements: false # 是否缓存PSTMT
       max-pool-prepared-statement-per-connection-size: 20 # 配置 PSTMT 缓存个数
+      max-open-prepared-statements: 20
       filters: stat,wall,log4j2
       web-stat-filter:
         enabled: true
@@ -51,6 +52,7 @@ spring:
         log4j2:
           enabled: true
           statement-executable-sql-log-enable: true
+
 
 
 

@@ -10,9 +10,6 @@ spring:
   datasource:
     druid:
       driver-class-name: com.mysql.cj.jdbc.Driver
-#      url: jdbc:mysql://10.153.57.107:3306/tkp-repository?characterEncoding=utf8&useSSL=false
-#      username: tkprepository
-#      password: "TKP#tkp-repository@Test"
       url: jdbc:mysql://127.0.0.1:3306/customer_ticket?characterEncoding=utf8&useSSL=false
       username: root
       password: 123456
@@ -27,8 +24,8 @@ spring:
       test-while-idle: false # 判断连接是否可用
       test-on-borrow: false # 在获取连接前验证连接是否可用
       test-on-return: false # 在归还连接前验证连接是否可用
-      keep-alive: true
-      keep-alive-between-time-millis: 100000
+#      keep-alive: true
+#      keep-alive-between-time-millis: 100000
       pool-prepared-statements: false # 是否缓存PSTMT
       max-pool-prepared-statement-per-connection-size: 20 # 配置 PSTMT 缓存个数
       filters: stat,wall,log4j2
