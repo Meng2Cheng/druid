@@ -24,7 +24,7 @@ public class OrderService {
     }
 
     public List<OrderInfoNew> query(OrderInfoNew build) {
-        ResponseEntity<String> forEntity = restTemplate.getForEntity("https://baidu.com", String.class);
+//        ResponseEntity<String> forEntity = restTemplate.getForEntity("https://baidu.com", String.class);
         List<OrderInfoNew> orderInfoNewList = orderNewMapper.findAll();
         log.info("查询结果为==={}",orderInfoNewList);
         return orderInfoNewList;

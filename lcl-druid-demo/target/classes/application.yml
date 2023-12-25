@@ -7,44 +7,55 @@ spring:
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
-#  datasource:
-#    druid:
-#      driver-class-name: com.mysql.cj.jdbc.Driver
-#      url: jdbc:mysql://127.0.0.1:3306/customer_ticket?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
-#      username: root
-#      password: 123456
-#      initial-size: 5 # 初始化连接池大小
-#      min-idle: 3 # 最小维持的连接数大小
-#      max-active: 40 # 最大活跃连接数
-#      max-wait: 60000 # 最长等待时间
-#      time-between-eviction-runs-millis: 6000 # 关闭空闲连接间隔（毫秒）
-#      min-evictable-idle-time-millis: 30000 # 连接最小存活时间
-#      validation-query: select 1 from dual # 验证连接存活sql
-#      validation-query-timeout: 1000 # 验证连接存活超时时间
-#      test-while-idle: true # 判断连接是否可用
-#      test-on-borrow: false # 在获取连接前验证连接是否可用
-#      test-on-return: false # 在归还连接前验证连接是否可用
-#      pool-prepared-statements: false # 是否缓存PSTMT
-#      max-pool-prepared-statement-per-connection-size: 20 # 配置 PSTMT 缓存个数
-#      web-stat-filter:
-#        enabled: true
-#        url-pattern: '/*'
-#        exclusions: '*.js,*.gif,*.jpg,*.bmp,*.png,*.css,*.ico,/druid/*'
-#      # 配置DruidStatViewServlet
-#      stat-view-servlet:
-#        enabled: true
-#        url-pattern: '/druid/*'
-#        login-username: admin
-#        login-password: admin
-#      filter:
-#        stat:
-#          log-slow-sql: true
-#          merge-sql: true
-#          slow-sql-millis: 1000
-#        wall:
-#          config:
-#            multi-statement-allow: true
-#            delete-allow: false
+  datasource:
+    druid:
+      driver-class-name: com.mysql.cj.jdbc.Driver
+#      url: jdbc:mysql://10.153.57.107:3306/tkp-repository?characterEncoding=utf8&useSSL=false
+#      username: tkprepository
+#      password: "TKP#tkp-repository@Test"
+      url: jdbc:mysql://127.0.0.1:3306/customer_ticket?characterEncoding=utf8&useSSL=false
+      username: root
+      password: 123456
+      initial-size: 3 # 初始化连接池大小
+      min-idle: 3 # 最小维持的连接数大小
+      max-active: 8 # 最大活跃连接数
+      max-wait: 1000 # 最长等待时间
+      time-between-eviction-runs-millis: 60000 # 关闭空闲连接间隔（毫秒）
+      min-evictable-idle-time-millis: 300000 # 连接最小存活时间
+      validation-query: select 1 from dual # 验证连接存活sql
+      validation-query-timeout: 10000 # 验证连接存活超时时间
+      test-while-idle: false # 判断连接是否可用
+      test-on-borrow: false # 在获取连接前验证连接是否可用
+      test-on-return: false # 在归还连接前验证连接是否可用
+      keep-alive: true
+      keep-alive-between-time-millis: 100000
+      pool-prepared-statements: false # 是否缓存PSTMT
+      max-pool-prepared-statement-per-connection-size: 20 # 配置 PSTMT 缓存个数
+      filters: stat,wall,log4j2
+      web-stat-filter:
+        enabled: true
+        url-pattern: '/*'
+        exclusions: '*.js,*.gif,*.jpg,*.bmp,*.png,*.css,*.ico,/druid/*'
+      # 配置DruidStatViewServlet
+      stat-view-servlet:
+        enabled: true
+        url-pattern: '/druid/*'
+        login-username: admin
+        login-password: admin
+      filter:
+        stat:
+          log-slow-sql: true
+          merge-sql: true
+          slow-sql-millis: 10000
+        wall:
+          config:
+            multi-statement-allow: true
+            delete-allow: false
+        log4j2:
+          enabled: true
+          statement-executable-sql-log-enable: true
+
+
 
   # 模拟bean配置
   lcl:
@@ -54,15 +65,15 @@ spring:
         url: jdbc:mysql://127.0.0.1:3306/customer_ticket?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
         username: root
         password: 123456
-        initial-size: 5 # 初始化连接池大小
+        initial-size: 3 # 初始化连接池大小
         min-idle: 3 # 最小维持的连接数大小
-        max-active: 40 # 最大活跃连接数
-        max-wait: 60000 # 最长等待时间
+        max-active: 8 # 最大活跃连接数
+        max-wait: 1000 # 最长等待时间
         time-between-eviction-runs-millis: 6000 # 关闭空闲连接间隔（毫秒）
         min-evictable-idle-time-millis: 30000 # 连接最小存活时间
         validation-query: select 1 from dual # 验证连接存活sql
         validation-query-timeout: 1000 # 验证连接存活超时时间
-        test-while-idle: true # 判断连接是否可用
+        test-while-idle: false # 判断连接是否可用
         test-on-borrow: false # 在获取连接前验证连接是否可用
         test-on-return: false # 在归还连接前验证连接是否可用
         pool-prepared-statements: false # 是否缓存PSTMT

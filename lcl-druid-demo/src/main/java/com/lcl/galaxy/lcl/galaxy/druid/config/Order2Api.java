@@ -1,4 +1,4 @@
-package com.lcl.galaxy.lcl.galaxy.druid.apis;
+package com.lcl.galaxy.lcl.galaxy.druid.config;
 
 import com.lcl.galaxy.lcl.galaxy.druid.aop.GuavaLimiter;
 import com.lcl.galaxy.lcl.galaxy.druid.domain.OrderInfoNew;
@@ -8,8 +8,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping(value = "/order")
-public class OrderApi {
+@RequestMapping(value = "/order2")
+public class Order2Api {
 
     @Autowired
     private OrderService orderService;
@@ -35,14 +35,8 @@ public class OrderApi {
 
 
     @RequestMapping("/query")
-    @GuavaLimiter(key = "queryOrder1-1", permitsPerSecond = 50)
+    @GuavaLimiter(key = "queryOrder2-1", permitsPerSecond = 1)
     public String query(long orderId, long venderId){
-        return orderService.query(OrderInfoNew.builder().orderId(orderId).venderId(venderId).build()).toString();
-    }
-
-    @RequestMapping("/query2")
-    @GuavaLimiter(key = "queryOrder1-2", permitsPerSecond = 1)
-    public String query2(long orderId, long venderId){
         return orderService.query(OrderInfoNew.builder().orderId(orderId).venderId(venderId).build()).toString();
     }
 
